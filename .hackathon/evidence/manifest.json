@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "items": [],
+  "required_fields": [
+    "supports",
+    "does_not_prove",
+    "evidence_mode",
+    "source",
+    "captured_at",
+    "sha256",
+    "privacy_classification"
+  ]
+}
+

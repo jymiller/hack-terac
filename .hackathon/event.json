@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "event_key": "zero-human-company-hackathon-by-terac-2026-08-15",
+  "name": "Zero-Human Company Hackathon by Terac",
+  "date": "2026-08-15",
+  "timezone": "America/Los_Angeles",
+  "venue": "Humanmade, 655 Bryant Street, San Francisco, CA 94107",
+  "participation_state": "accepted",
+  "official_sources": [
+    "https://terac.com/events/hackathon",
+    "https://luma.com/d7vavxhk"
+  ],
+  "schedule": {
+    "doors_open": "08:30",
+    "opening_ceremony": "09:15",
+    "hacking_begins": "10:45",
+    "submissions_lock": "18:45",
+    "judging_begins": "19:00",
+    "judges_finalize": "20:00",
+    "event_ends": "21:00"
+  },
+  "qualification_floor": [
+    "working application",
+    "real human input collected through Terac",
+    "measurable before-and-after improvement"
+  ],
+  "overall_judging": {
+    "improvement_from_human_input": 40,
+    "what_was_built": 35,
+    "quality_and_efficiency_of_human_input": 25
+  },
+  "as_of": "2026-08-13T21:14:00-07:00"
+}
+

@@ -1,0 +1,39 @@
+schema: looping-lab/experiment@1
+id: LL-2026-003
+event_key: zero-human-company-hackathon-by-terac-2026-08-15
+status: blocked_pending_concept_lock
+
+candidate_hypothesis: >
+  A hybrid delivery policy can lower cost per accepted outcome relative to
+  all-human review while meeting a locked quality, coverage, and turnaround
+  floor.
+
+authority:
+  owner: John
+  human_reviewers: bounded evidence only
+  activation: pending owner decision
+
+data:
+  classification: synthetic_only
+  client_data_permitted: false
+  enid_data_permitted: false
+
+candidate_comparison:
+  - all_human
+  - all_automated
+  - optimized_hybrid
+
+candidate_metrics:
+  - quality
+  - delivery_coverage
+  - turnaround
+  - cost_per_accepted_outcome
+  - terac_usage
+  - hold_rate
+  - authority_violations
+
+activation_gate:
+  concept_lock_required: true
+  live_spend_authorized: false
+  product_build_authorized: false
+

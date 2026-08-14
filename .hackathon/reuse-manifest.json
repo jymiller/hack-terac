@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "items": [],
+  "excluded_preexisting_assets": [
+    "Looping Lab application code",
+    "MongoDB Enid Mandate Relay code",
+    "Enid source and data",
+    "client documents and data"
+  ],
+  "policy": "Every reused artifact must be declared before it enters the build."
+}
+

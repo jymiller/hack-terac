@@ -1,0 +1,2 @@
+{"schema_version":1,"at":"2026-08-14T10:30:36-07:00","stage":"bootstrap","status":"complete","change":"Created the repository contract and evidence scaffolding.","check":"Repository files are values-free and contain no Enid or client data.","next":"Complete five owner concept decisions before implementation."}
+

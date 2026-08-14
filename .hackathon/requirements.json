@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "concept_lock": "pending_owner_decisions",
+  "owner_defined": [
+    "standalone Terac-powered administrative product",
+    "reduce delivery cost per trusted outcome",
+    "preserve delivery quality",
+    "no Enid code, data, API, MCP, client documents, or production integration",
+    "synthetic financial cases only"
+  ],
+  "open_decisions": [
+    {
+      "id": "outcome",
+      "question": "What is the first client outcome to optimize?"
+    },
+    {
+      "id": "service-floor",
+      "question": "Must the floor preserve quality alone, or quality, coverage, and turnaround together?"
+    },
+    {
+      "id": "routing",
+      "question": "Which delivery routes are allowed?"
+    },
+    {
+      "id": "activation",
+      "question": "Who may activate a cheaper policy after it passes its gate?"
+    },
+    {
+      "id": "proof",
+      "question": "What evidence earns the right to start the product build?"
+    }
+  ],
+  "decision_surface": "https://looping-lab-briefing-room.jymillersf.chatgpt.site/concepts/terac",
+  "working_name": {
+    "value": null,
+    "status": "owner_decision_pending"
+  }
+}
+

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "not_run",
+  "gates": [
+    "working_app",
+    "real_terac_input",
+    "human_input_causes_identified_change",
+    "measurable_before_after",
+    "synthetic_and_live_evidence_labeled",
+    "authority_boundary_visible",
+    "all_links_reopened",
+    "independent_evaluator_passes"
+  ]
+}
+
