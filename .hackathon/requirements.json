@@ -1,6 +1,49 @@
 {
-  "schema_version": 1,
-  "concept_lock": "pending_owner_decisions",
+  "schema_version": 2,
+  "concept_lock": {
+    "schema_version": 1,
+    "authorization_scope": "product_implementation_only",
+    "preserves_owner_defined_boundaries": true,
+    "decision_ledger": ".hackathon/decisions.jsonl",
+    "required_decisions_from": "open_decisions",
+    "qualifying_record": {
+      "schema_version": 1,
+      "record_type": "concept_lock",
+      "actor": "owner:john",
+      "status": "confirmed",
+      "required_fields": [
+        "schema_version",
+        "record_type",
+        "decision_id",
+        "at",
+        "actor",
+        "status",
+        "answers",
+        "decision",
+        "source"
+      ],
+      "ledger_decision_id_rule": "D-[0-9]{4,}",
+      "answers_field": "answers",
+      "answer_rule": "exact_required_keys_with_trimmed_non_empty_text",
+      "unique_ledger_decision_ids": true,
+      "record_policy": "exactly_one_confirmed_record"
+    },
+    "does_not_authorize": [
+      "spend",
+      "deployment",
+      "external_terac_launch",
+      "release_or_submission",
+      "enid_integration",
+      "enid_or_client_data",
+      "non_synthetic_data"
+    ],
+    "does_not_prove": [
+      "owner_identity_beyond_the_ledger_claim",
+      "answer_substantive_quality_or_consistency",
+      "concept_feasibility",
+      "product_quality_or_event_qualification"
+    ]
+  },
   "owner_defined": [
     "standalone Terac-powered administrative product",
     "reduce delivery cost per trusted outcome",
@@ -36,4 +79,3 @@
     "status": "owner_decision_pending"
   }
 }
-

@@ -1,7 +1,7 @@
-schema: looping-lab/experiment@1
+schema: looping-lab/experiment@2
 id: LL-2026-003
 event_key: zero-human-company-hackathon-by-terac-2026-08-15
-status: blocked_pending_concept_lock
+status: prep
 
 candidate_hypothesis: >
   A hybrid delivery policy can lower cost per accepted outcome relative to
@@ -34,6 +34,7 @@ candidate_metrics:
 
 activation_gate:
   concept_lock_required: true
+  concept_lock_status:
+    source: canonical_validator
+    command: npm run check:concept-lock -- --json
   live_spend_authorized: false
-  product_build_authorized: false
-
