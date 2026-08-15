@@ -63,6 +63,7 @@ function ensureSchema() {
       claims_per_task integer default 4,
       minutes        integer,
       cost_cents     integer,
+      cpi_cents      integer,
       task_url       text,
       dashboard_url  text,
       created_at     timestamptz not null default now(),
@@ -72,6 +73,7 @@ function ensureSchema() {
       alter table terac_opportunities add column if not exists claims_per_task integer default 4;
       alter table terac_opportunities add column if not exists minutes integer;
       alter table terac_opportunities add column if not exists cost_cents integer;
+      alter table terac_opportunities add column if not exists cpi_cents integer;
       alter table terac_opportunities add column if not exists dashboard_url text;
       create unique index if not exists terac_opportunities_wave_idx on terac_opportunities (wave);
     `),
@@ -218,16 +220,22 @@ export function registerOpsRoutes(app) {
       const draft = await createOpportunity(body);
       const id = draft.id ?? draft?.opportunity?.id;
       const full = await getOpportunity(id).catch(() => draft);
-      const cost = full?.pricing?.total_cost_cents ?? draft?.pricing?.total_cost_cents ?? null;
+      const pricing = full?.pricing ?? draft?.pricing ?? null;
+      const cost = pricing?.total_cost_cents ?? null;
+      // A DRAFT price is an autonomous estimate and is not what Terac ends up charging:
+      // the first wave was drafted at 1350/participant and settled at 169. Store what is
+      // quoted, but treat it as provisional until refreshFromTerac() reads it back.
+      const cpi = pricing?.cost_per_participant_cents ?? null;
       const dash =
         full?.links?.dashboard?.draft_editor ?? full?.links?.dashboard?.submissions ?? null;
 
       await query(
         `insert into terac_opportunities
-           (id, wave, status, participants, claims_per_task, minutes, cost_cents, task_url, dashboard_url)
-         values ($1,$2,'draft',$3,$4,$5,$6,$7,$8)
-         on conflict (id) do update set status='draft', cost_cents=excluded.cost_cents`,
-        [id, wave, participants, claimsPerTask, minutes, cost, taskUrl, dash],
+           (id, wave, status, participants, claims_per_task, minutes, cost_cents, cpi_cents, task_url, dashboard_url)
+         values ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9)
+         on conflict (id) do update set status='draft',
+           cost_cents=excluded.cost_cents, cpi_cents=excluded.cpi_cents`,
+        [id, wave, participants, claimsPerTask, minutes, cost, cpi, taskUrl, dash],
       );
 
       const judgments = participants * claimsPerTask;
@@ -256,9 +264,19 @@ export function registerOpsRoutes(app) {
       const id = req.body?.opportunityId;
       if (!id) return res.status(400).json({ error: "opportunityId is required" });
       const out = await launchOpportunity(id);
+      // The draft estimate is superseded at launch, so read the settled price back rather
+      // than keeping a number that was never charged.
+      let settled = out?.pricing ?? null;
+      if (!settled?.cost_per_participant_cents) {
+        settled = (await getOpportunity(id).catch(() => null))?.pricing ?? settled;
+      }
       await query(
-        `update terac_opportunities set status='active', launched_at=now() where id=$1`,
-        [id],
+        `update terac_opportunities
+            set status='active', launched_at=now(),
+                cost_cents = coalesce($2, cost_cents),
+                cpi_cents  = coalesce($3, cpi_cents)
+          where id=$1`,
+        [id, settled?.total_cost_cents ?? null, settled?.cost_per_participant_cents ?? null],
       );
       res.json({ ok: true, opportunity: out });
     } catch (err) {

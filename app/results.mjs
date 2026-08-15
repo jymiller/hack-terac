@@ -13,13 +13,15 @@ const FLOOR = 0.9;
 const FALLBACK_CPI_CENTS = 169;
 
 async function humanCpiCents() {
+  // Prefer the price Terac quotes per participant. Dividing a total by a head count
+  // reproduces whatever error is in the total, and a launched wave's total is the only
+  // one worth trusting anyway.
   const { rows } = await query(
-    `select participants, cost_cents from terac_opportunities
-      where participants > 0 and cost_cents > 0
-      order by launched_at desc nulls last, created_at desc limit 1`,
+    `select cpi_cents from terac_opportunities
+      where cpi_cents > 0 and launched_at is not null
+      order by launched_at desc limit 1`,
   ).catch(() => ({ rows: [] }));
-  const r = rows[0];
-  return r ? Math.round(r.cost_cents / r.participants) : FALLBACK_CPI_CENTS;
+  return rows[0]?.cpi_cents ?? FALLBACK_CPI_CENTS;
 }
 
 /**
