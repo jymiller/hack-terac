@@ -19,6 +19,8 @@ import { registerLinqRoutes } from "./linq-routes.mjs";
 import { registerOpsRoutes } from "./ops.mjs";
 import { registerDesignRoutes } from "./design.mjs";
 import { registerExtractRoutes } from "./extract.mjs";
+import { registerSupportRoutes } from "./support.mjs";
+import { boardPage, boardState } from "./board.mjs";
 
 const FLOOR = 0.9;
 // Fallback only. The real value is per-wave: the participant costs the same whether they
@@ -68,6 +70,7 @@ const { webhookPath: linqWebhookPath } = registerLinqRoutes(app);
 registerOpsRoutes(app);
 registerDesignRoutes(app);
 registerExtractRoutes(app);
+registerSupportRoutes(app);
 // Certificate pages the worker and the models both read.
 app.use("/docs", express.static("public/docs", { maxAge: "1h" }));
 
@@ -289,10 +292,10 @@ app.get("/api/coverage", async (_req, res) => res.json(await coverage()));
 
 app.get("/", async (_req, res) => {
   try {
-    res.type("html").send(coveragePage(await coverage()));
+    res.type("html").send(boardPage(await boardState()));
   } catch (err) {
-    console.error("coverage render failed:", err);
-    res.status(500).send("coverage unavailable");
+    console.error("board failed:", err);
+    res.status(500).send(`<pre>${err.message}</pre>`);
   }
 });
 

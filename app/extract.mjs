@@ -1,6 +1,7 @@
 import express from "express";
 import { query } from "./db.mjs";
 import { CERTS, FIELDS, INSTRUCTION, byId, scoreAnswer, verifyFixtures } from "./certs.mjs";
+import { refFor, supportNumber } from "./support.mjs";
 
 let ready = null;
 function ensureSchema() {
@@ -116,6 +117,7 @@ export function registerExtractRoutes(app) {
       extractPage({
         cert,
         submissionId: sid,
+        ref: refFor(sid),
         taskId: req.query.taskId ?? "",
         wave: req.params.wave,
       }),
@@ -154,7 +156,7 @@ export function registerExtractRoutes(app) {
   });
 }
 
-function extractPage({ cert, submissionId, taskId, wave }) {
+function extractPage({ cert, submissionId, taskId, wave, ref }) {
   const imgs = Array.from(
     { length: cert.pages },
     (_, i) => `/docs/png/${cert.file}-${i + 1}.png`,
@@ -202,7 +204,7 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
            <input name="${f.key}" required autocomplete="off">`,
     ).join("")}
     <button type="submit">Submit my answers</button>
-    <p class="note">Stuck or something looks wrong? Text <strong>${process.env.LINQ_SUPPORT_NUMBER ?? "+1 646 299-5885"}</strong> and we will reply. Answering &quot;not stated&quot; is fine when the document does not print something.</p>
+    <p class="note">Stuck or something looks wrong? Text <a href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}"><strong>${supportNumber()}</strong></a> and we will reply. Your reference is <strong>${ref}</strong> — please include it so we know which task you are on. Answering &quot;not stated&quot; is fine when the document does not print something.</p>
     <p class="note">Your answers are recorded against this task only. The document is a synthetic example created for testing and describes no real company.</p>
   </form>
 </div>
