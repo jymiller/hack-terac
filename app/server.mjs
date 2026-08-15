@@ -21,6 +21,7 @@ import { registerDesignRoutes } from "./design.mjs";
 import { registerExtractRoutes } from "./extract.mjs";
 import { registerSupportRoutes } from "./support.mjs";
 import { boardPage, boardState } from "./board.mjs";
+import { registerFunnelRoutes } from "./funnel.mjs";
 
 const FLOOR = 0.9;
 // Fallback only. The real value is per-wave: the participant costs the same whether they
@@ -71,6 +72,7 @@ registerOpsRoutes(app);
 registerDesignRoutes(app);
 registerExtractRoutes(app);
 registerSupportRoutes(app);
+registerFunnelRoutes(app);
 // Certificate pages the worker and the models both read.
 app.use("/docs", express.static("public/docs", { maxAge: "1h" }));
 

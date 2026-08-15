@@ -266,7 +266,7 @@ export function registerSupportRoutes(app) {
 }
 
 function supportPage(s) {
-  const nav = `<nav style="display:flex;gap:18px;margin:0 0 22px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px"><a href="/" style="color:var(--mut)">Coverage board</a><a href="/ops" style="color:var(--mut)">Operator</a><a href="/design" style="color:var(--mut)">Designer</a><a href="/support" style="color:var(--acc)">Support</a></nav>`;
+  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/support" class='on'>Support</a></nav>`;
   const rows = s.messages.length
     ? s.messages
         .map(

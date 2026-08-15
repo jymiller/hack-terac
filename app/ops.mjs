@@ -325,9 +325,9 @@ pre{background:#0c0c0d;border:1px solid var(--line);border-radius:8px;padding:12
 a{color:var(--acc)}
 .warn{color:var(--warn)}.ok{color:var(--ok)}.bad{color:var(--bad)}
 </style></head><body><div class="wrap">
-<nav style="display:flex;gap:18px;margin:0 0 22px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px"><a href="/" style="color:var(--mut)">Coverage board</a><a href="/ops" style="color:var(--acc)">Operator</a><a href="/design" style="color:var(--mut)">Designer</a><span style="flex:1"></span><a href="/healthz" style="color:var(--mut)">health</a></nav>
+<nav><a href="/">Coverage board</a><a href="/ops" class='on'>Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/support">Support</a></nav>
 <h1>Coverage Engine — Operator</h1>
-<p class="sub">Dispatch calibration waves. Readiness is the Wilson 95% lower bound over independent claims, against a ${(s.floor * 100).toFixed(0)}% floor.</p>
+<p class="sub">Dispatch calibration waves. Readiness is the Wilson 95% lower bound over independent field judgements, against a ${(s.floor * 100).toFixed(0)}% floor.</p>
 
 <div class="card"><div class="grid">
   <div><label>Completed tasks</label><div class="big">${s.completed_tasks}</div></div>
