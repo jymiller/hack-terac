@@ -7,7 +7,7 @@ services:
     # Not `free`: free services spin down after 15 minutes idle and take about a
     # minute to wake, which is a judge staring at a blank tab.
     plan: starter
-    branch: milbird/hackathon-vendor-setup-1bfa50
+    branch: main
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz
