@@ -2,11 +2,12 @@ services:
   - type: web
     name: hack-terac
     runtime: node
+    repo: https://github.com/jymiller/hack-terac
     region: oregon
     # Not `free`: free services spin down after 15 minutes idle and take about a
     # minute to wake, which is a judge staring at a blank tab.
     plan: starter
-    branch: main
+    branch: milbird/hackathon-vendor-setup-1bfa50
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz

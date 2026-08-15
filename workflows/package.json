@@ -1,0 +1,15 @@
+{
+  "name": "hack-terac-workflows",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "dev": "render workflows dev -- node src/main.mjs"
+  },
+  "dependencies": {
+    "@renderinc/sdk": "^0.6.0"
+  }
+}

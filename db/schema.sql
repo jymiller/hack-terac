@@ -43,6 +43,7 @@ create table if not exists evals (
   metric      text not null,
   value       double precision not null,
   n           integer,
-  evidence_mode text not null default 'live' check (evidence_mode in ('live', 'synthetic')),
+  -- Defaults to synthetic: a row must CLAIM to be human-backed, never inherit it.
+  evidence_mode text not null default 'synthetic' check (evidence_mode in ('live', 'synthetic')),
   recorded_at timestamptz not null default now()
 );

@@ -2,14 +2,36 @@ import express from "express";
 import crypto from "node:crypto";
 import { constructEvent, paymentLinkFor } from "./stripe.mjs";
 import {
+  agreementByProcess,
   claimEvent,
+  claimVerdicts,
   createOrder,
   markOrderFailed,
   markOrderPaid,
   query,
+  recordAttestations,
   recordTeracResponse,
   revenueTotals,
 } from "./db.mjs";
+import { thetaLicensed, label as readinessLabel } from "./readiness.mjs";
+import { coveragePage, donePage, taskPage } from "./views.mjs";
+import { registerLinqRoutes } from "./linq-routes.mjs";
+import { registerOpsRoutes } from "./ops.mjs";
+import { registerDesignRoutes } from "./design.mjs";
+import { registerExtractRoutes } from "./extract.mjs";
+
+const FLOOR = 0.9;
+// Fallback only. The real value is per-wave: the participant costs the same whether they
+// answer 4 claims or 40, so claims-per-task is the main lever on cost per judgment.
+const CLAIMS_PER_TASK = 4;
+const MAPPED = [
+  { name: "Corporate authority and entity existence", expertise_area: "Corporate legal" },
+  { name: "Lien perfection — debtor-name sufficiency", expertise_area: "Secured lending" },
+  { name: "Collateral eligibility screening", expertise_area: "Asset-based lending" },
+  { name: "Beneficial-ownership completeness", expertise_area: "Financial crime" },
+  { name: "Legal opinion coverage checklist", expertise_area: "Counsel opinions" },
+  { name: "Contract construction — defined terms", expertise_area: "Credit legal" },
+];
 
 const app = express();
 
@@ -39,7 +61,20 @@ app.post(
   },
 );
 
+// Before the global JSON parser: the Linq webhook verifies a signature over raw bytes.
+const { webhookPath: linqWebhookPath } = registerLinqRoutes(app);
+
+// Operator console. Its routes carry their own JSON parser for the same reason.
+registerOpsRoutes(app);
+registerDesignRoutes(app);
+registerExtractRoutes(app);
+// Certificate pages the worker and the models both read.
+app.use("/docs", express.static("public/docs", { maxAge: "1h" }));
+
 app.use(express.json());
+// The worker task page is a plain HTML form, so it posts urlencoded, not JSON.
+// Without this the body is empty and every real submission is lost permanently.
+app.use(express.urlencoded({ extended: false }));
 
 async function handleStripeEvent(event) {
   const session = event.data.object;
@@ -101,28 +136,163 @@ app.post("/api/orders", async (req, res) => {
   }
 });
 
+/** Deterministic claim block from the submission id, stratified across processes. */
+async function claimsFor(submissionId, wave) {
+  const h = crypto.createHash("sha256").update(submissionId).digest();
+  let n = CLAIMS_PER_TASK;
+  if (wave) {
+    const { rows: w } = await query(
+      `select claims_per_task from terac_opportunities where wave = $1 limit 1`,
+      [wave],
+    ).catch(() => ({ rows: [] }));
+    if (w?.[0]?.claims_per_task) n = w[0].claims_per_task;
+  }
+  const { rows } = await query(
+    `select id, process_id, evidence, proposition
+       from claims where holdout = false order by process_id, id`,
+  );
+  const byProcess = new Map();
+  for (const r of rows) {
+    if (!byProcess.has(r.process_id)) byProcess.set(r.process_id, []);
+    byProcess.get(r.process_id).push(r);
+  }
+  const groups = [...byProcess.values()];
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < n && groups.length; i++) {
+    const g = groups[i % groups.length];
+    // Walk forward on collision so a big block does not repeat the same claim.
+    let idx = (h.readUInt32BE((i * 4) % 28) + Math.floor(i / groups.length)) % g.length;
+    for (let tries = 0; tries < g.length && seen.has(g[idx].id); tries++) idx = (idx + 1) % g.length;
+    seen.add(g[idx].id);
+    out.push(g[idx]);
+  }
+  return out;
+}
+
 /**
- * Terac appends ?teracSubmissionId=&taskId= to the task_url. The response body
- * is not retrievable from Terac's API afterwards, so this is the only place the
- * human input is ever captured. Losing it here loses it permanently.
+ * The worker lands here. Terac appends ?teracSubmissionId=&taskId= to task_url, and the
+ * response body is not retrievable from Terac's API afterwards, so an arrival receipt is
+ * written before anything renders — that makes an abandon measurable instead of invisible.
+ */
+app.get("/t/:wave", async (req, res) => {
+  const { teracSubmissionId, taskId, opportunityId } = req.query;
+  if (!teracSubmissionId) {
+    return res.status(400).send("This link is missing its Terac submission id.");
+  }
+  try {
+    await recordTeracResponse({
+      teracSubmissionId,
+      taskId,
+      opportunityId,
+      payload: { status: "opened", wave: req.params.wave, opened_at: new Date().toISOString() },
+    });
+    const claims = await claimsFor(teracSubmissionId, req.params.wave);
+    res.type("html").send(taskPage({ submissionId: teracSubmissionId, taskId, opportunityId, claims }));
+  } catch (err) {
+    console.error("task render failed:", err);
+    res.status(500).send("Sorry — this task could not be loaded.");
+  }
+});
+
+/**
+ * The only durable record of the human input. The write happens BEFORE the redirect
+ * that marks the submission complete on Terac's side: redirecting on a failed insert
+ * would pay a worker for data we no longer hold.
  */
 app.post("/api/terac/responses", async (req, res) => {
+  const body = req.body ?? {};
+  const { teracSubmissionId, taskId, opportunityId } = body;
+  const form = req.is("application/x-www-form-urlencoded");
+  if (!teracSubmissionId) {
+    return res.status(400).json({ error: "teracSubmissionId is required" });
+  }
   try {
-    const { teracSubmissionId, taskId, opportunityId, ...payload } = req.body ?? {};
-    if (!teracSubmissionId) {
-      return res.status(400).json({ error: "teracSubmissionId is required" });
-    }
+    const items = Object.entries(body)
+      .filter(([k]) => k.startsWith("item_"))
+      .map(([k, v]) => ({ claimId: k.slice(5), answer: v }));
+    const payload = {
+      status: "completed",
+      submitted_at: new Date().toISOString(),
+      items,
+      ...(form ? {} : body),
+    };
     await recordTeracResponse({ teracSubmissionId, taskId, opportunityId, payload });
-    res.status(201).json({
-      ok: true,
-      // Marks the submission complete on Terac's side and triggers payout.
-      redirect: `https://terac.com/api/external/callback?teracSubmissionId=${encodeURIComponent(
-        teracSubmissionId,
-      )}&taskId=${encodeURIComponent(taskId ?? "")}&result=completed`,
-    });
+
+    // Normalization sits OUTSIDE the capture failure boundary. The raw payload is the
+    // durable record; if deriving attestations fails we still complete and still pay the
+    // worker, and scripts/backfill-attestations.mjs re-derives from the stored payload.
+    try {
+      if (items.length) await recordAttestations({ teracSubmissionId, items });
+    } catch (err) {
+      console.error(`normalize failed for ${teracSubmissionId} (raw payload is safe):`, err.message);
+    }
+
+    const redirect =
+      `https://terac.com/api/external/callback?teracSubmissionId=${encodeURIComponent(teracSubmissionId)}` +
+      `&taskId=${encodeURIComponent(taskId ?? "")}&result=completed`;
+    // A server-side 303 so a worker with JS disabled still completes and still gets paid.
+    if (form) return res.redirect(303, redirect);
+    res.status(201).json({ ok: true, redirect });
   } catch (err) {
     console.error("capture failed:", err);
     res.status(500).json({ error: "could not record response" });
+  }
+});
+
+app.get("/done", (_req, res) => res.type("html").send(donePage()));
+
+async function coverage() {
+  const { rows: processes } = await query(`select * from processes order by id`);
+  const measured = new Map((await agreementByProcess()).map((r) => [r.process_id, r]));
+
+  // Judgments are nested inside workers and inside claims, so they are not independent
+  // trials. The bound is computed over CLAIMS, using each claim's majority verdict.
+  const verdicts = await claimVerdicts();
+  const perProcess = new Map();
+  for (const v of verdicts) {
+    const g = perProcess.get(v.process_id) ?? { n: 0, x: 0 };
+    g.n++;
+    if (v.majority === "AGREE") g.x++;
+    perProcess.set(v.process_id, g);
+  }
+
+  const rows = processes.map((p) => {
+    const m = measured.get(p.id);
+    const g = perProcess.get(p.id) ?? { n: 0, x: 0 };
+    return {
+      process_id: p.id,
+      name: p.name,
+      expertise_area: p.expertise_area,
+      claims: g.n,
+      judgments: m?.judgments ?? 0,
+      agreement: g.n ? g.x / g.n : null,
+      lower: g.n ? thetaLicensed(g.x, g.n) : null,
+      label: readinessLabel({ x: g.x, n: g.n, floor: FLOOR }),
+      evidence_mode: g.n ? "live" : "synthetic",
+      cost: Number(m?.cost_usd ?? 0),
+    };
+  });
+  const totals = rows.reduce(
+    (a, r) => ({
+      judgments: a.judgments + r.judgments,
+      claims: a.claims + r.claims,
+      cost: a.cost + r.cost,
+    }),
+    { judgments: 0, claims: 0, cost: 0 },
+  );
+  totals.perJudgment = totals.judgments ? (totals.cost / totals.judgments).toFixed(2) : "0.00";
+  return { rows, mapped: MAPPED, totals, floor: FLOOR };
+}
+
+app.get("/api/coverage", async (_req, res) => res.json(await coverage()));
+
+app.get("/", async (_req, res) => {
+  try {
+    res.type("html").send(coveragePage(await coverage()));
+  } catch (err) {
+    console.error("coverage render failed:", err);
+    res.status(500).send("coverage unavailable");
   }
 });
 
