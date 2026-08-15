@@ -102,21 +102,46 @@ const money = (c) => (c == null ? "—" : `$${(c / 100).toFixed(2)}`);
 
 export function funnelPage(s) {
   const max = Math.max(1, ...s.stages.map((x) => x.n));
-  const bars = s.stages
-    .map((st) => {
-      const w = Math.max(2, (st.n / max) * 100);
-      const tone = st.who === "terac" ? "terac" : "us";
-      return `<div class="stage">
-      <div class="lbl"><span class="who ${tone}">${st.who === "terac" ? "TERAC" : "OURS"}</span> ${st.label}</div>
-      <div class="track"><div class="bar ${tone}" style="width:${w}%"></div><span class="n">${st.n}</span></div>
-      <div class="meta">${
-        st.step_conversion == null
-          ? `${pct(st.of_applied)} of applicants`
-          : `${pct(st.step_conversion)} of previous · <span class="${st.lost > 0 ? "bad" : "mut"}">${st.lost > 0 ? `−${st.lost} lost` : "no loss"}</span>`
-      }</div>
-    </div>`;
+  const W = 720, BAND = 74, GAP = 8, MINW = 90;
+  const widthFor = (n) => MINW + (W - MINW) * (n / max);
+
+  // Each band is a trapezoid running from its own width to the next stage's, so the shape
+  // narrows exactly in proportion to the people actually lost at that step.
+  const bands = s.stages
+    .map((st, i) => {
+      const y = i * (BAND + GAP);
+      const wTop = widthFor(st.n);
+      const wBot = widthFor(i + 1 < s.stages.length ? s.stages[i + 1].n : st.n);
+      const x1 = (W - wTop) / 2, x2 = (W - wBot) / 2;
+      const fill = st.who === "terac" ? "var(--terac)" : "var(--acc)";
+      const lost = st.lost;
+      return `
+      <polygon points="${x1},${y} ${x1 + wTop},${y} ${x2 + wBot},${y + BAND} ${x2},${y + BAND}"
+               fill="${fill}" fill-opacity="0.26" stroke="${fill}" stroke-opacity="0.55"/>
+      <text x="${W / 2}" y="${y + 30}" text-anchor="middle" class="fn">${st.n}</text>
+      <text x="${W / 2}" y="${y + 50}" text-anchor="middle" class="fl">${st.label}</text>
+      <text x="${W / 2}" y="${y + 66}" text-anchor="middle" class="fs">${
+        st.step_conversion == null ? `${st.who === "terac" ? "Terac" : "ours"}` : `${pct(st.step_conversion)} of previous`
+      }</text>
+      ${
+        lost > 0
+          ? `<text x="${W - 4}" y="${y + BAND / 2 + 4}" text-anchor="end" class="fx">−${lost}</text>`
+          : ""
+      }`;
     })
     .join("");
+  const svgH = s.stages.length * (BAND + GAP);
+  const bars = `<svg viewBox="0 0 ${W} ${svgH}" width="100%" height="${svgH}" role="img"
+     aria-label="Funnel from ${s.stages[0].n} applicants to ${s.stages[s.stages.length - 1].n} scored extractions">
+  <style>
+    .fn{fill:var(--fg);font:700 21px ui-sans-serif,system-ui;font-variant-numeric:tabular-nums}
+    .fl{fill:var(--fg);font:600 12.5px ui-sans-serif,system-ui}
+    .fs{fill:var(--mut);font:11px ui-sans-serif,system-ui}
+    .fx{fill:var(--bad);font:600 12px ui-sans-serif,system-ui}
+  </style>${bands}</svg>
+  <p class="sub" style="margin:14px 0 0">End to end: <strong>${s.stages[s.stages.length - 1].n} of ${s.stages[0].n}</strong>
+  applicants produced usable work — <strong>${pct(s.stages[0].n ? s.stages[s.stages.length - 1].n / s.stages[0].n : null)}</strong>.
+  Purple stages are all Terac can see; blue stages happen on our host.</p>`;
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Recruitment Funnel</title><style>
