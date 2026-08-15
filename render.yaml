@@ -4,9 +4,10 @@ services:
     runtime: node
     repo: https://github.com/jymiller/hack-terac
     region: oregon
-    # Not `free`: free services spin down after 15 minutes idle and take about a
-    # minute to wake, which is a judge staring at a blank tab.
-    plan: starter
+    # Free to avoid a payment gate during the event. Free services spin down after
+    # 15 minutes idle and take about a minute to wake, so upgrade to `starter` before
+    # anyone is asked to sit and watch it load.
+    plan: free
     branch: main
     buildCommand: npm install
     startCommand: npm start
