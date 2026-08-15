@@ -88,7 +88,7 @@ export async function boardState() {
 const pct = (x) => (x == null ? "—" : (x * 100).toFixed(1) + "%");
 
 export function boardPage(s) {
-  const nav = `<nav><a href="/" class='on'>Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/support">Support</a></nav>`;
+  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>`;
 
   const headline = s.human_n
     ? `${s.human_n} paid human extraction${s.human_n === 1 ? "" : "s"} against ${s.model_n} model run${s.model_n === 1 ? "" : "s"} on the same certificates.`

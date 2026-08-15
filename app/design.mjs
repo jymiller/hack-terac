@@ -137,7 +137,7 @@ code{font-size:12.5px}
 a{color:var(--acc)}
 .note{font-size:12.5px;color:var(--mut);margin-top:10px}
 </style></head><body><div class="wrap">
-<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design" class='on'>Designer</a><a href="/funnel">Funnel</a><a href="/support">Support</a></nav>
+<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
 <h1>Experiment Designer</h1>
 <p class="sub">Both sides of one comparison, on the same claim. If the two tasks are not really the same question, the agreement number means nothing — so look before you buy.</p>
 
