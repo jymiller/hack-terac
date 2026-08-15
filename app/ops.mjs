@@ -305,6 +305,8 @@ function opsPage(s) {
 :root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--acc:#60a5fa}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+nav{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
+nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
 h1{font-size:22px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:32px 0 10px}
 .sub{color:var(--mut);margin:0 0 20px;font-size:13px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
@@ -325,7 +327,7 @@ pre{background:#0c0c0d;border:1px solid var(--line);border-radius:8px;padding:12
 a{color:var(--acc)}
 .warn{color:var(--warn)}.ok{color:var(--ok)}.bad{color:var(--bad)}
 </style></head><body><div class="wrap">
-<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
+<nav><a href="/">Coverage board</a><a href="/ops" class="on">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
 <h1>Coverage Engine — Operator</h1>
 <p class="sub">Dispatch calibration waves. Readiness is the Wilson 95% lower bound over independent field judgements, against a ${(s.floor * 100).toFixed(0)}% floor.</p>
 

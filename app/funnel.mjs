@@ -171,7 +171,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500}
 td{padding:8px;border-bottom:1px solid var(--line)}tr:last-child td{border-bottom:0}
 </style></head><body><div class="wrap">
-<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
+<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel" class="on">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
 <h1>Recruitment → delivery funnel</h1>
 <p class="sub">Terac's dashboard stops at its own boundary. The stages marked OURS happen on our host and are invisible to it — which is where the money actually leaks.</p>
 

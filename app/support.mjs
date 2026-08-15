@@ -266,7 +266,7 @@ export function registerSupportRoutes(app) {
 }
 
 function supportPage(s) {
-  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>`;
+  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support" class="on">Support</a></nav>`;
   const rows = s.messages.length
     ? s.messages
         .map(
@@ -291,6 +291,8 @@ function supportPage(s) {
 :root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--acc:#60a5fa}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 80px}
+nav{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
+nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
 h1{font-size:22px;margin:0 0 2px}.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}

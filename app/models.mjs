@@ -42,7 +42,7 @@ async function pageDataUrls(cert) {
   return out;
 }
 
-const SCHEMA_HINT = `Reply with ONLY a JSON object, no prose and no code fence, with exactly these keys:
+export const SCHEMA_HINT = `Reply with ONLY a JSON object, no prose and no code fence, with exactly these keys:
 ${FIELDS.map((f) => `  "${f.key}"  // ${f.label} — ${f.hint}`).join("\n")}
 Use the string "not stated" for anything the document does not print.`;
 

@@ -16,8 +16,12 @@ export async function boardState() {
     query(`select source, coalesce(model_id,'human') as who, cert_id, answers, detail, correct, total, duration_ms
              from extractions`),
     query(`select cert_id, count(*)::int as n from extractions group by 1`),
-    query(`select wave, status, participants, cost_cents, launched_at
-             from terac_opportunities where status in ('active','stopped') order by launched_at desc nulls last limit 5`),
+    // Delivery is per wave: what we committed, who reached the work, and what came back usable.
+    query(`select o.wave, o.status, o.participants, o.cost_cents, o.launched_at,
+             (select count(*)::int from terac_responses r where r.payload->>'wave' = o.wave) as arrived,
+             (select count(*)::int from extractions e where e.wave = o.wave and e.source = 'human') as delivered
+             from terac_opportunities o where o.status in ('active','stopped')
+             order by o.launched_at desc nulls last limit 5`),
     query(`select count(*)::int as total, sum(answered::int)::int as auto, sum(escalated::int)::int as esc
              from support_messages`).catch(() => ({ rows: [{ total: 0, auto: 0, esc: 0 }] })),
   ]);

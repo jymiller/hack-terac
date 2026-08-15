@@ -130,6 +130,24 @@ export function registerExtractRoutes(app) {
     const certId = b.certId;
     if (!sid || !certId) return res.status(400).json({ error: "teracSubmissionId and certId required" });
     try {
+      // The unique index carries model_id, which is NULL for every human row, and Postgres
+      // treats NULLs as distinct — so ON CONFLICT never fires here. Without this guard a
+      // back-then-resubmit writes a second row from one paid reader, and the readiness bound
+      // counts it as independent evidence. Pay them either way; just don't count it twice.
+      await ensureSchema();
+      const { rows: dup } = await query(
+        `select 1 from extractions where terac_submission_id = $1 and source = 'human' limit 1`,
+        [sid],
+      );
+      if (dup.length) {
+        const url =
+          `https://terac.com/api/external/callback?teracSubmissionId=${encodeURIComponent(sid)}` +
+          `&taskId=${encodeURIComponent(b.taskId ?? "")}&result=completed`;
+        return req.is("application/x-www-form-urlencoded")
+          ? res.redirect(303, url)
+          : res.status(200).json({ ok: true, duplicate: true, redirect: url });
+      }
+
       const answers = Object.fromEntries(FIELDS.map((f) => [f.key, b[f.key] ?? ""]));
       await recordExtraction({
         submissionId: sid,
@@ -166,13 +184,23 @@ function extractPage({ cert, submissionId, taskId, wave, ref }) {
 :root{color-scheme:light dark;--bg:#fbfaf8;--fg:#18181b;--mut:#6b7280;--line:#e4e4e7;--card:#fff;--acc:#1d4ed8}
 @media(prefers-color-scheme:dark){:root{--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--acc:#60a5fa}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:24px 18px 90px}
+.wrap{max-width:1440px;margin:0 auto;padding:24px 18px 90px}
 h1{font-size:23px;margin:0 0 6px}
 .sub{color:var(--mut);margin:0 0 18px;font-size:14px}
-.cols{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:start}
+.cols{display:grid;grid-template-columns:1.45fr 1fr;gap:18px;align-items:start}
 @media(max-width:900px){.cols{grid-template-columns:1fr}}
-.doc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;position:sticky;top:14px;max-height:88vh;overflow:auto}
-.doc img{width:100%;display:block;margin-bottom:10px;border:1px solid var(--line);border-radius:6px}
+.doc{background:var(--card);border:1px solid var(--line);border-radius:12px;position:sticky;top:14px;
+  display:flex;flex-direction:column;max-height:92vh;overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bar .spacer{flex:1}
+.bar button{margin:0;width:auto;background:transparent;color:var(--fg);border:1px solid var(--line);
+  border-radius:7px;padding:5px 10px;font-size:13px;font-weight:500}
+.bar button:hover{border-color:var(--mut)}
+.bar .lbl{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pages{overflow:auto;padding:10px;flex:1;scroll-behavior:smooth}
+.pages img{display:block;margin:0 auto 10px;border:1px solid var(--line);border-radius:6px;
+  width:calc(100% * var(--z,1));max-width:none;cursor:zoom-in;aspect-ratio:1653/2339}
+.pages.zoomed img{cursor:zoom-out}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
 ol{margin:8px 0 0;padding-left:20px;font-size:14px}li{margin:5px 0}
 label{display:block;font-size:13px;font-weight:600;margin:16px 0 3px}
@@ -183,10 +211,24 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
 .warn{background:#fef3c7;color:#78350f;border-radius:8px;padding:10px 12px;font-size:13px;margin:14px 0}
 @media(prefers-color-scheme:dark){.warn{background:#3f2d0a;color:#fde68a}}
 </style></head><body><div class="wrap">
-<h1>Read this certificate and report what it states</h1>
-<p class="sub">Everything you need is in the document on the left. Roughly 5 minutes.</p>
+<h1>Read this compliance certificate and report eight things it states</h1>
+<p class="sub">A ${cert.pages}-page compliance certificate is on the left — click it to zoom in. All eight answers are printed in it, so nothing has to be worked out. Most people take 7 to 9 minutes, and there is no time limit.</p>
 <div class="cols">
-  <div class="doc">${imgs.map((s) => `<img src="${s}" alt="Certificate page" loading="lazy">`).join("")}</div>
+  <div class="doc">
+    <div class="bar">
+      <button type="button" id="zo" title="Zoom out">&minus;</button>
+      <span class="lbl" id="zl">Fit</span>
+      <button type="button" id="zi" title="Zoom in">+</button>
+      <button type="button" id="zf">Fit width</button>
+      <span class="spacer"></span>
+      <button type="button" id="pp" title="Previous page">&uarr;</button>
+      <span class="lbl" id="pl">Page 1 of ${imgs.length}</span>
+      <button type="button" id="pn" title="Next page">&darr;</button>
+    </div>
+    <div class="pages" id="pages">${imgs
+      .map((s, i) => `<img src="${s}" alt="Certificate page ${i + 1} of ${imgs.length}"${i ? ' loading="lazy"' : ""}>`)
+      .join("")}</div>
+  </div>
   <form class="card" method="post" action="/api/extract">
     <input type="hidden" name="teracSubmissionId" value="${submissionId}">
     <input type="hidden" name="taskId" value="${taskId}">
@@ -194,8 +236,9 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
     <input type="hidden" name="certId" value="${cert.id}">
     <input type="hidden" name="durationMs" id="durationMs" value="">
     <strong>Your task</strong>
+    <p class="sub" style="margin:6px 0 0">${INSTRUCTION.split("\n")[0]}</p>
     <ol>${INSTRUCTION.split("\n").filter((l) => /^\d\./.test(l.trim())).map((l) => `<li>${l.replace(/^\s*\d\.\s*/, "")}</li>`).join("")}</ol>
-    <div class="warn">Report only what the document states. If something is not stated, write <strong>not stated</strong>. Please do not estimate or calculate anything the document does not print.</div>
+    <div class="warn">${INSTRUCTION.split("\n\n").pop().replace(/\n/g, " ").replace('"not stated"', "<strong>not stated</strong>")}</div>
     ${FIELDS.map((f) =>
       f.key === "compliant"
         ? `<label>${f.label} <span class="hint">— ${f.hint}</span></label>
@@ -208,6 +251,55 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
     <p class="note">Your answers are recorded against this task only. The document is a synthetic example created for testing and describes no real company.</p>
   </form>
 </div>
-<script>const t0=Date.now();document.querySelector("form").addEventListener("submit",()=>{document.getElementById("durationMs").value=Date.now()-t0});</script>
+<script>
+const t0=Date.now();
+document.querySelector("form").addEventListener("submit",()=>{document.getElementById("durationMs").value=Date.now()-t0});
+
+// Document viewer. The pages render at 200dpi, so "Fit width" is a downscale and zooming in
+// walks back toward native resolution rather than past it into mush.
+const pages=document.getElementById("pages"), imgs=[...pages.querySelectorAll("img")];
+const Z=[1,1.5,2,3]; let zi=0;
+const zl=document.getElementById("zl"), pl=document.getElementById("pl");
+
+function apply(keep){
+  const sw=pages.scrollWidth, sh=pages.scrollHeight;
+  const fx=keep?(pages.scrollLeft+keep.cx)/sw:0, fy=keep?(pages.scrollTop+keep.cy)/sh:0;
+  pages.style.setProperty("--z",Z[zi]);
+  pages.classList.toggle("zoomed",zi>0);
+  zl.textContent=zi?Math.round(Z[zi]*100)+"%":"Fit";
+  if(keep)requestAnimationFrame(()=>{
+    pages.scrollLeft=fx*pages.scrollWidth-keep.cx;
+    pages.scrollTop=fy*pages.scrollHeight-keep.cy;
+  });
+}
+function label(){
+  const top=pages.getBoundingClientRect().top; let n=1;
+  imgs.forEach((im,i)=>{if(im.getBoundingClientRect().top-top<=80)n=i+1});
+  pl.textContent="Page "+n+" of "+imgs.length;
+}
+function cur(){
+  const top=pages.getBoundingClientRect().top; let n=0;
+  imgs.forEach((im,i)=>{if(im.getBoundingClientRect().top-top<=80)n=i});
+  return n;
+}
+function goto(i){
+  i=Math.max(0,Math.min(imgs.length-1,i));
+  pages.scrollTop+=imgs[i].getBoundingClientRect().top-pages.getBoundingClientRect().top-8;
+}
+document.getElementById("zi").onclick=()=>{if(zi<Z.length-1){zi++;apply()}};
+document.getElementById("zo").onclick=()=>{if(zi>0){zi--;apply()}};
+document.getElementById("zf").onclick=()=>{zi=0;apply()};
+document.getElementById("pn").onclick=()=>goto(cur()+1);
+document.getElementById("pp").onclick=()=>goto(cur()-1);
+pages.addEventListener("click",e=>{
+  if(e.target.tagName!=="IMG")return;
+  const r=pages.getBoundingClientRect();
+  zi=zi===0?2:0;
+  apply({cx:e.clientX-r.left,cy:e.clientY-r.top});
+});
+pages.addEventListener("scroll",label,{passive:true});
+imgs.forEach(im=>im.addEventListener("load",label));
+label();
+</script>
 </div></body></html>`;
 }
