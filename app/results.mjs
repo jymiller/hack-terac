@@ -3,7 +3,24 @@ import { CERTS, FIELDS } from "./certs.mjs";
 import { wilson } from "./readiness.mjs";
 
 const FLOOR = 0.9;
-const HUMAN_CPI_CENTS = 1350;
+
+/**
+ * Fallback only. Terac's own record is authoritative and is read per-wave below:
+ * `cost_per_participant_cents` was 169 on the first wave, while `total_cost_cents` was
+ * 1352 for eight people. Reading the wave total as a per-person price overstates every
+ * human cost figure by the participant count, which is exactly the mistake this replaces.
+ */
+const FALLBACK_CPI_CENTS = 169;
+
+async function humanCpiCents() {
+  const { rows } = await query(
+    `select participants, cost_cents from terac_opportunities
+      where participants > 0 and cost_cents > 0
+      order by launched_at desc nulls last, created_at desc limit 1`,
+  ).catch(() => ({ rows: [] }));
+  const r = rows[0];
+  return r ? Math.round(r.cost_cents / r.participants) : FALLBACK_CPI_CENTS;
+}
 
 /**
  * The outcome surface: one table of who read the same documents and what they got right.
@@ -12,6 +29,7 @@ const HUMAN_CPI_CENTS = 1350;
  * so the only thing that differs between the rows is who did the reading.
  */
 export async function resultsState() {
+  const cpiCents = await humanCpiCents();
   const { rows } = await query(
     `select source, coalesce(model_id,'human') as who, cert_id, detail, correct, total, duration_ms
        from extractions order by received_at`,
@@ -57,7 +75,7 @@ export async function resultsState() {
       const medMs = w.ms.length ? w.ms.sort((a, b) => a - b)[Math.floor(w.ms.length / 2)] : null;
       // A human costs one CPI per certificate read; a model costs its API call, which at
       // these sizes rounds to nothing next to $13.50.
-      const costCents = w.source === "human" ? HUMAN_CPI_CENTS * w.runs : 0;
+      const costCents = w.source === "human" ? cpiCents * w.runs : 0;
       return {
         ...w,
         certs: [...w.certs],
@@ -74,6 +92,7 @@ export async function resultsState() {
 
   return {
     floor: FLOOR,
+    cpi_cents: cpiCents,
     entrants,
     fields: FIELDS.map((f) => ({ ...f, byWho: fieldTotals[f.key] })),
     humans: entrants.filter((e) => e.source === "human"),
@@ -183,7 +202,7 @@ td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}tr
 <div class="card">${
     s.entrants.length
       ? `<table><tr><th>Reader</th><th class="num">Docs</th><th class="num">Fields</th><th>Accuracy · 95% interval</th><th class="num">Median</th><th class="num">Cost</th><th class="num">Traps</th></tr>${rows}</table>
-    <p class="sub" style="margin:14px 0 0">Cost is what it took to obtain that reader's answers: ${"$" + (HUMAN_CPI_CENTS / 100).toFixed(2)} per certificate for a recruited human, effectively nothing for an API call. The interval is what the evidence licenses, not the observed rate.</p>`
+    <p class="sub" style="margin:14px 0 0">Cost is what it took to obtain that reader's answers: ${"$" + (s.cpi_cents / 100).toFixed(2)} per certificate for a recruited human, effectively nothing for an API call. The interval is what the evidence licenses, not the observed rate.</p>`
       : `<div class="empty">No runs yet.</div>`
   }</div>
 
