@@ -43,10 +43,10 @@ export function opportunityBody({
   businessType = "b2c",
 }) {
   return {
-    title: `Does this short excerpt support this statement? (${claimsPerTask} items, ~${minutes} min)`,
-    internal_title: "Coverage engine — calibration wave 1",
+    title: `Read a compliance certificate and report 8 values it prints (~${minutes} min)`,
+    internal_title: "Coverage engine — certificate extraction",
     description:
-      `You will see ${claimsPerTask} short business-document excerpts. Each comes with one sentence a computer wrote about it. For each, say whether the excerpt supports that sentence, contradicts it, or does not contain enough to tell. Answer only from the excerpt shown. All documents are fictional examples created for this study and contain no real company, person, or account.`,
+      `You will be shown a short financial compliance certificate — two or three pages — and asked to type eight values that are printed in it: the entity it is for, the date its reporting period ended, the name of the main financial ratio it certifies, that ratio\u2019s value, the two figures the ratio is calculated from, one threshold, and whether the certificate states the entity is compliant.\n\nNo finance background is needed and there is nothing to calculate. Every answer is already printed somewhere in the document; the work is finding it and copying it accurately. If the document does not state something, you say so.\n\nThe documents are synthetic examples created for testing and describe no real company, person, or account.`,
     project_id: projectId,
     num_participants: participants,
     business_type: businessType,
@@ -62,23 +62,26 @@ export function opportunityBody({
         // Pays automatically on completion, which requires a task_url whose page
         // redirects to Terac's callback. Ours does.
         review_type: "auto_approve",
-        title: `Grounded-claim verification — ${claimsPerTask} short items`,
+        title: `Certificate reading — 8 values to find and report`,
         description:
-          "Read each excerpt and decide whether it supports the sentence shown, contradicts it, or does not say enough to tell.",
+          "Open the certificate, find the eight values listed on the page, and type them in. Answer only from the document shown.",
         task_url: taskUrl,
         duration_minutes: minutes,
       },
     ],
     screening_questions: [
       {
-        key: "doc_comfort",
-        text: "Which best describes how often you read business or financial documents such as invoices, account statements, or contracts?",
+        // The previous version of this question rejected 0 of 14 applicants: every answer
+        // qualified, so it screened nobody and only spent panel time. This one tests the
+        // behaviour the task actually depends on — copying a printed figure exactly.
+        key: "transcription",
+        text: "A document prints a figure as 5.43. Reporting it to us, what would you type?",
         pick: "one",
         answers: [
-          { text: "Regularly, as part of my work or personal finances", qualify_logic: "may" },
-          { text: "Occasionally", qualify_logic: "may" },
-          { text: "Almost never, and I find documents with numbers difficult", qualify_logic: "reject" },
-          { text: "None of the above", qualify_logic: "reject" },
+          { text: "5.43", qualify_logic: "may" },
+          { text: "5.4, rounded", qualify_logic: "reject" },
+          { text: "About 5", qualify_logic: "reject" },
+          { text: "Whatever the surrounding text says it should be", qualify_logic: "reject" },
         ],
       },
       {
