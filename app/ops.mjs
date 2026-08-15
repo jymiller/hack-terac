@@ -1,6 +1,7 @@
 import express from "express";
-import { query, agreementByProcess } from "./db.mjs";
-import { seed, runArm, scorePolicy, PROCESSES } from "./experiment.mjs";
+import { query } from "./db.mjs";
+import { CERTS, FIELDS } from "./certs.mjs";
+const FIELD_COUNT = 8;
 import {
   createOpportunity,
   createProject,
@@ -82,39 +83,56 @@ const money = (c) => (c == null ? null : `$${(c / 100).toFixed(2)}`);
 
 async function opsState() {
   await ensureSchema();
-  const [corpus, opps, agree, subs] = await Promise.all([
-    query(`select c.process_id, p.name, p.expertise_area, count(*)::int as claims,
-                  sum((c.ground_truth = 'insufficient')::int)::int as insufficient
-             from claims c join processes p on p.id = c.process_id
-            group by 1,2,3 order by 2`),
+  const [certRes, fieldRes, opps, openRes] = await Promise.all([
+    query(`select cert_id, count(*)::int as n,
+                  sum(correct)::int as correct, sum(total)::int as total
+             from extractions where source = 'human' group by 1`),
+    query(`select detail from extractions where source = 'human'`),
     query(`select * from terac_opportunities order by created_at desc limit 5`),
-    agreementByProcess(),
-    query(`select count(*)::int as n from terac_responses where payload->>'status' = 'completed'`),
+    query(`select payload->>'status' as status, count(*)::int as n
+             from terac_responses group by 1`),
   ]);
 
-  const byProcess = new Map(agree.map((a) => [a.process_id, a]));
-  const rows = corpus.rows.map((c) => {
-    const a = byProcess.get(c.process_id);
-    const claims = a ? Number(a.claims) : 0;
-    const agreed = a ? Number(a.agree) : 0;
-    const theta = thetaLicensed(agreed, claims);
+  // Per-field correctness across every human extraction.
+  const fields = {};
+  for (const r of fieldRes.rows) {
+    for (const [k, v] of Object.entries(r.detail ?? {})) {
+      const f = (fields[k] ??= { n: 0, ok: 0 });
+      f.n++;
+      if (v.correct) f.ok++;
+    }
+  }
+
+  const byCert = new Map(certRes.rows.map((r) => [r.cert_id, r]));
+  const corpus = CERTS.map((c) => {
+    const r = byCert.get(c.id);
+    const n = r ? r.n : 0;
+    const ok = r ? Number(r.correct) : 0;
+    const tot = r ? Number(r.total) : 0;
     return {
-      ...c,
-      judgments: a ? Number(a.judgments) : 0,
-      rated_claims: claims,
-      agreed,
-      theta,
-      label: readinessLabel({ x: agreed, n: claims, floor: FLOOR }),
-      evidence_mode: claims > 0 ? "live" : "synthetic",
+      process_id: c.id,
+      name: c.entity,
+      expertise_area: c.truth.ratio_name,
+      claims: FIELD_COUNT,
+      rated_claims: n,
+      agreed: ok,
+      judgments: tot,
+      theta: thetaLicensed(ok, tot),
+      label: readinessLabel({ x: ok, n: tot, floor: FLOOR }),
+      evidence_mode: n > 0 ? "live" : "synthetic",
     };
   });
 
+  const opened = openRes.rows.reduce((a, r) => a + r.n, 0);
+  const done = openRes.rows.find((r) => r.status === "completed")?.n ?? 0;
   return {
     floor: FLOOR,
-    corpus: rows,
+    corpus,
+    fields,
     opportunities: opps.rows,
-    completed_tasks: subs.rows[0].n,
-    total_attestations: agree.reduce((s, a) => s + Number(a.judgments), 0),
+    completed_tasks: done,
+    opened_tasks: opened,
+    total_attestations: certRes.rows.reduce((a, r) => a + Number(r.total ?? 0), 0),
   };
 }
 
@@ -124,29 +142,6 @@ export function registerOpsRoutes(app) {
   app.get("/api/ops/state", async (_req, res) => {
     try {
       res.json(await opsState());
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  /** Rebuilds the synthetic corpus and the machine baseline. Safe: upserts, never deletes. */
-  app.post("/api/ops/reseed", json, async (_req, res) => {
-    try {
-      const n = await seed({ perProcess: 60 });
-      await runArm({ arm: "balanced-v1", tier: "balanced", seed: "balanced-v1" });
-      await runArm({ arm: "economy-v1", tier: "economy", seed: "economy-v1" });
-      const sweep = [];
-      for (const t of [0.5, 0.7, 0.8, 0.9, 0.95]) {
-        const r = await scorePolicy({ arm: "balanced-v1", threshold: t });
-        const cov = r.reduce((a, x) => a + x.coverage, 0) / (r.length || 1);
-        const acc = r.filter((x) => x.accuracy !== null);
-        sweep.push({
-          threshold: t,
-          coverage: cov,
-          accuracy: acc.length ? acc.reduce((a, x) => a + x.accuracy, 0) / acc.length : null,
-        });
-      }
-      res.json({ claims: n, processes: PROCESSES.length, sweep });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -336,14 +331,14 @@ a{color:var(--acc)}
 
 <div class="card"><div class="grid">
   <div><label>Completed tasks</label><div class="big">${s.completed_tasks}</div></div>
-  <div><label>Human attestations</label><div class="big">${s.total_attestations}</div></div>
-  <div><label>Processes</label><div class="big">${s.corpus.length}</div></div>
-  <div><label>Synthetic claims</label><div class="big">${s.corpus.reduce((a, c) => a + c.claims, 0)}</div></div>
+  <div><label>Fields judged</label><div class="big">${s.total_attestations}</div></div>
+  <div><label>Tasks opened</label><div class="big">${s.opened_tasks}</div></div>
+  <div><label>Certificates</label><div class="big">${s.corpus.length}</div></div>
 </div></div>
 
-<h2>Processes</h2>
+<h2>Certificates</h2>
 <div class="card"><table>
-<tr><th>Process</th><th>Expertise</th><th>Claims</th><th>Rated</th><th>Agree</th><th>Readiness</th><th>Evidence</th></tr>
+<tr><th>Certificate</th><th>Primary ratio</th><th>Fields</th><th>Extractions</th><th>Fields correct</th><th>Readiness</th><th>Evidence</th></tr>
 ${s.corpus
   .map(
     (c) => `<tr>
@@ -355,9 +350,7 @@ ${s.corpus
   )
   .join("")}
 </table>
-<p class="sub" style="margin:12px 0 0">A process with no attestations reports 0.000 by construction — it cannot inherit readiness it has not been measured for.</p>
-<div style="margin-top:12px"><button class="ghost" onclick="reseed()">Rebuild corpus &amp; baseline</button></div>
-<pre id="seedout" style="display:none"></pre>
+<p class="sub" style="margin:12px 0 0">A certificate nobody has extracted reports 0.000 by construction — it cannot inherit readiness it has not been measured for.</p>
 </div>
 
 <h2>Plan — what a wave can actually buy</h2>
@@ -442,7 +435,6 @@ ${
 <script>
 const out=(id,v)=>{const e=document.getElementById(id);e.style.display="block";e.textContent=typeof v==="string"?v:JSON.stringify(v,null,2)};
 async function post(u,b){const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});return[r.ok,await r.json()]}
-async function reseed(){out("seedout","rebuilding…");const[ok,j]=await post("/api/ops/reseed");out("seedout",j);if(ok)setTimeout(()=>location.reload(),900)}
 async function draftIt(){
   out("draftout","building draft…");
   const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,claimsPerTask:+claimsPerTask.value});
