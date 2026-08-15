@@ -18,3 +18,8 @@ venv/
 artifacts/private/
 *.log
 
+
+# agent tooling, not event build artifacts
+.agents/
+.cortex/
+skills-lock.json

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: hack-terac
+    runtime: node
+    region: oregon
+    # Not `free`: free services spin down after 15 minutes idle and take about a
+    # minute to wake, which is a judge staring at a blank tab.
+    plan: starter
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PAYMENT_LINK
+        sync: false
+      - key: TERAC_API_KEY
+        sync: false
+      - key: TERAC_BASE_URL
+        value: https://terac.com/api/external/v2

@@ -1,41 +1,55 @@
 # Hack Terac
 
-**Status:** PREP — CONCEPT LOCK PENDING  
-**Event:** Zero-Human Company Hackathon by Terac · 15 August 2026
+**Status:** BUILD — CONCEPT PENDING (gate retired by `D-0002`)  
+**Event:** Zero-Human Company Hackathon by Terac · 15 August 2026  
+**Submissions lock:** 18:45 PDT · **feature freeze:** 17:15 PDT
 
 This repository is the canonical build, experiment, evidence, and submission
 workspace for the Terac hackathon.
 
-## Owner-set brief
+## Event rules that actually bind
 
-Build a standalone Terac-powered administrative product that reduces the cost
-of producing a trusted client outcome while preserving the service contract.
-The hackathon product does not modify or integrate with Enid and uses no Enid
-code, Enid data, client documents, or production credentials.
+Build one or more agents that run a company autonomously — product, marketing,
+outbound, selling, payments, legal/compliance, hard decisions.
 
-Only synthetic financial cases are permitted.
+Every project must:
 
-## What is settled
+- use the Terac MCP;
+- collect real human input through Terac during the event; and
+- show a measurable before-and-after improvement caused by that input.
 
-- Clients buy trusted outcomes, not a labor model.
-- Delivery cost should fall over time without lowering quality.
-- Qualified Terac judgment is a measurable delivery resource.
-- The hackathon product is standalone and outside Enid.
-- The competition build and its evidence live in this repository.
+Scoring for Best Overall Project is 40% improvement from human input, 35% what
+was built, 25% quality and efficiency of the human input. A second $2,500 prize
+goes to the agent-run company that earns real revenue during the day *and* looks
+most likely to succeed after it. Revenue is tracked by organizers through a
+read-only Stripe restricted key.
+
+## Owner-set boundary
+
+Standalone product. No Enid code, Enid data, client documents, or production
+credentials — that boundary is unchanged and is not relaxed by `D-0002`.
+
+Real event participants and real Stripe payments are permitted; synthetic
+fixtures seed the demo and stay visibly labeled as synthetic.
+
+## Committed stack
+
+| Layer | Vendor |
+|---|---|
+| Human input | Terac (required) — MCP at `https://terac.com/api/mcp` |
+| Hosting + orchestration | Render, including Render Workflows |
+| Database | Neon Postgres |
+| Payments | Stripe (required for the revenue prize) |
+| Messaging surface | Linq |
+| Agent sandboxes | Superserve |
+| Agent coordination | Band |
+| Open-weight models | Pioneer by Fastino Labs |
+| QA | Replay |
 
 ## What remains open
 
-John must decide:
-
-1. the first outcome to optimize;
-2. the full service floor;
-3. the allowed delivery routes;
-4. who may activate a cheaper policy; and
-5. the evidence required before the build is authorized.
-
-The current agent recommendations are advisory. They are not product
-requirements until recorded as owner decisions in
-[.hackathon/decisions.jsonl](.hackathon/decisions.jsonl).
+The concept itself. `D-0001`'s administrative-product framing is superseded;
+the replacement direction is a clean sheet and is not yet recorded.
 
 ## Concept-lock gate
 

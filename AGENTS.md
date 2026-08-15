@@ -12,9 +12,12 @@
 ## Scope
 
 - Work only in this repository.
-- Use only synthetic financial fixtures created for this event.
+- Seed and demonstrate with synthetic fixtures. Real event-day participants,
+  their submitted inputs, and real Stripe payments are permitted, because the
+  event requires real human input and real revenue.
 - Do not read, copy, mount, query, or depend on Enid, Enid Vault, client
   documents, client data, production systems, or MongoDB-hackathon code.
+  This boundary is not relaxed by anything below.
 - Do not add an Enid API, MCP server, database connection, or product
   integration.
 
@@ -26,10 +29,12 @@
   `does_not_prove` boundary.
 - Never store credentials, participant PII, raw interviews, or confidential
   material in Git.
-- Spending, live Terac launches, public deployment, visibility changes, and
-  submission require explicit owner authorization.
-- Do not begin product implementation until the concept-lock record contains
-  all five required owner decisions.
+- Public deployment to Render, live Terac launches, and Stripe collection are
+  authorized for 15 August 2026 by `D-0002`. Submission still requires an
+  explicit owner go.
+- The five-answer concept-lock gate is retired for this event by `D-0002`.
+  `scripts/check-concept-lock.mjs` and its tests remain in the repository as
+  history; they no longer gate implementation.
 
 ## Quality
 
