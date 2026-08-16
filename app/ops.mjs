@@ -346,6 +346,14 @@ function opsPage(s) {
   // colours the ring and the text together.
   const tone = (l) =>
     l === "LICENSED" ? "ok" : l === "RULED OUT" ? "bad" : l === "UNMEASURED" ? "dim" : "warn";
+  // The internal labels are the statistics talking. An operator needs the decision.
+  const verdict = (l) =>
+    ({
+      LICENSED: "Safe to automate",
+      "RULED OUT": "Keep a human on it",
+      UNMEASURED: "Nobody has read it",
+      "NOT YET DISTINGUISHED": "Not enough evidence yet",
+    })[l] ?? l;
   const statusTone = (st) => (st === "active" ? "ok" : st === "draft" ? "warn" : "dim");
   // A draft is only launchable if its task_url points at the host we are actually serving.
   // Drafts left over from the cloudflared tunnel recruit people to a dead address, so they
@@ -470,18 +478,25 @@ ${
 }
 ${!draft && !live && !stale.length ? `<div class="quiet">Nothing needs you. Build a draft below to start a wave.</div>` : ""}
 
-<h2>Readiness by certificate</h2>
+<h2>Can we stop paying humans to read this?</h2>
 <div class="card"><div class="tbl"><table>
-<thead><tr><th>Certificate</th><th class="num">Readings</th><th class="num">Fields correct</th>
-<th>Readiness</th><th>Evidence</th></tr></thead>
+<thead><tr><th>Certificate</th><th class="num">People who read it</th><th class="num">Answers right</th>
+<th>Can it run unattended?</th><th>Human attestation</th></tr></thead>
 <tbody>
 ${s.corpus
   .map(
     (c) => `<tr>
   <td>${c.name}<div class="dim" style="font-size:12px">${c.expertise_area}</div></td>
-  <td class="num">${c.rated_claims}</td><td class="num">${c.agreed}/${c.judgments}</td>
-  <td><b>${c.theta.toFixed(3)}</b> <span class="tag ${tone(c.label)}">${c.label}</span></td>
-  <td><span class="tag ${c.evidence_mode === "live" ? "ok" : "warn"}">${c.evidence_mode.toUpperCase()}</span></td>
+  <td class="num">${c.rated_claims}<div class="dim" style="font-size:11.5px">via Terac</div></td>
+  <td class="num">${c.agreed}/${c.judgments}<div class="dim" style="font-size:11.5px">${
+    c.judgments ? `${c.rated_claims} × ${c.claims} fields` : "—"
+  }</div></td>
+  <td><span class="tag ${tone(c.label)}">${verdict(c.label)}</span>${
+    c.judgments ? `<div class="dim" style="font-size:11.5px;margin-top:4px">confidence floor ${c.theta.toFixed(2)}, needs ${(s.floor).toFixed(2)}</div>` : ""
+  }</td>
+  <td><span class="tag ${c.evidence_mode === "live" ? "ok" : "dim"}">${
+    c.evidence_mode === "live" ? "ATTESTED" : "NONE YET"
+  }</span></td>
 </tr>`,
   )
   .join("")}
@@ -509,10 +524,17 @@ ${s.corpus
 <details>
   <summary>How to read this page</summary>
   <div class="inner">
-    <p class="sowhat">Readiness is a Wilson 95% lower bound, so <b>0.000 means unmeasured, not
-    unreliable</b> — a certificate nobody has read cannot inherit readiness it was never tested for.
-    Only two labels change what you do: LICENSED means stop paying a human to read those fields,
-    RULED OUT means stop trying. Everything between is <b>evidence you have not bought yet</b>.</p>
+    <p class="sowhat">The certificate table answers one question: can this document be read
+    unattended. <b>Only two answers change what you do</b> — "Safe to automate" means stop paying
+    people to read it, "Keep a human on it" means stop trying. "Not enough evidence yet" is not a
+    complaint about the readers; it means the interval still straddles the floor and you have not
+    bought enough evidence to decide either way.</p>
+    <p class="sowhat">"People who read it" counts human readings bought through Terac — no model runs
+    are in that table. "Answers right" counts the individual field answers inside those readings,
+    which is why its denominator is larger. <b>The confidence floor is deliberately harsher than the
+    raw score</b>: it is the bottom of a 95% interval, so a handful of perfect readings still lands
+    short of the bar, which is the point. Treat it as an upper bound on our certainty rather than a
+    grade, since those field answers come from the same few people and are not fully independent.</p>
     <p class="sowhat">A field needs <b>${need} independent clean readings</b> before even perfect
     agreement can license it, which is why judgments rather than participants are what buy readiness.</p>
     <p class="sowhat"><b>Launch is the only control here that spends money</b>, and stopping later
