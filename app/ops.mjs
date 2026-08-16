@@ -818,10 +818,6 @@ async function stopIt(id){
   if(!confirm("Stop recruiting on this wave?")) return;
   const[ok,j]=await post("/api/ops/stop",{opportunityId:id}); out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
-setInterval(async()=>{
-  const s=await (await fetch("/api/ops/state")).json();
-  if(s.total_attestations!==${s.total_attestations}) location.reload();
-},7000);
 `;
 
   return page({

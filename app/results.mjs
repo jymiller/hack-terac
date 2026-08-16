@@ -306,7 +306,7 @@ at ${cpi} each; that is the bill to budget for.</p>
     current: "/results",
     body,
     extraCss: EXTRA_CSS,
-    script: "setInterval(()=>location.reload(),25000)",
+    script: "",
   });
 }
 

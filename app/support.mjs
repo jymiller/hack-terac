@@ -360,7 +360,7 @@ async function reply(id){
     body:JSON.stringify({id, text})});
   if(r.ok) location.reload(); else alert("Could not send that reply.");
 }
-setInterval(()=>location.reload(), 20000);
+
 `;
 
   return page({ title: "Support desk", current: "/support", body, extraCss: EXTRA_CSS, script });

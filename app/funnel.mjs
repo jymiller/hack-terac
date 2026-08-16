@@ -358,7 +358,7 @@ ${
     current: "/funnel",
     body,
     extraCss: EXTRA_CSS,
-    script: "setInterval(()=>location.reload(),20000)",
+    script: "",
   });
 }
 
