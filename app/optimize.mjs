@@ -59,7 +59,15 @@ export async function optimizeState(floor = FLOOR) {
       hi,
       clears: lo >= floor,
       cost_cents: perDoc,
+      // Cost divided by accuracy: what one CORRECT reading costs. A reader at half accuracy
+      // is not half as useful, it is twice as expensive per usable answer, and a raw price
+      // ranking hides that entirely.
+      cost_per_good: perDoc == null || !m.total || m.correct === 0 ? null : perDoc / (m.correct / m.total),
       per_1000: perDoc == null ? null : (perDoc * 1000) / 100,
+      per_1000_good:
+        perDoc == null || !m.total || m.correct === 0
+          ? null
+          : ((perDoc / (m.correct / m.total)) * 1000) / 100,
       median_s: m.ms.length ? m.ms.sort((a, b) => a - b)[Math.floor(m.ms.length / 2)] / 1000 : null,
     };
   });
@@ -81,6 +89,8 @@ export async function optimizeState(floor = FLOOR) {
       ? priced.filter((r) => r.rate === best).sort((a, b) => a.cost_cents - b.cost_cents)[0]
       : null);
   const cheapestAny = priced.slice().sort((a, b) => a.cost_cents - b.cost_cents)[0] ?? null;
+  const bestValue =
+    priced.filter((r) => r.cost_per_good != null).sort((a, b) => a.cost_per_good - b.cost_per_good)[0] ?? null;
 
   const h = humanRes.rows[0] ?? { n: 0, correct: 0, total: 0, med_ms: null };
   const [hlo, hhi] = wilson(Number(h.correct ?? 0), Number(h.total ?? 0));
@@ -92,6 +102,7 @@ export async function optimizeState(floor = FLOOR) {
     fields: FIELDS.length,
     readers: readers.sort((a, b) => (a.cost_cents ?? Infinity) - (b.cost_cents ?? Infinity)),
     cheapest,
+    bestValue,
     licensed,
     provisional: licensed == null && cheapest != null,
     cheapestAny,
@@ -208,39 +219,78 @@ ${
     : ""
 }
 
-<h2>Every reader, on the same ${s.fields} fields of the same documents</h2>
+<h2>The software, ranked by what a correct reading costs</h2>
 <div class="card">
 <table>
-<thead><tr><th>Reader</th><th class="num">Correct</th><th>Accuracy · 95% interval</th>
-<th class="num">Per document</th><th class="num">Per 1,000</th><th class="num">Median</th></tr></thead>
+<thead><tr><th>Model</th><th class="num">Correct</th><th>Accuracy</th>
+<th class="num">Per document</th><th class="num">Per correct reading</th><th class="num">Per 1,000 documents</th></tr></thead>
 <tbody>
-${s.readers.map((r) => row(r)).join("")}
-${h.total ? row(humanRow, true) : ""}
+${s.readers
+  .filter((r) => r.cost_cents != null)
+  .slice()
+  .sort((a, b) => (a.cost_per_good ?? Infinity) - (b.cost_per_good ?? Infinity))
+  .map(
+    (r) => `<tr>
+    <td><strong>${r.name}</strong>${
+      s.bestValue && r.id === s.bestValue.id ? ' <span class="tag ok">best value</span>' : ""
+    }</td>
+    <td class="num">${r.correct}/${r.total}</td>
+    <td style="min-width:140px"><div class="bar"><i style="width:${(r.rate ?? 0) * 100}%"></i></div>
+      <div class="rt">${pct(r.rate)}</div></td>
+    <td class="num">${money(r.cost_cents)}</td>
+    <td class="num"><strong>${r.cost_per_good == null ? "never" : money(r.cost_per_good)}</strong></td>
+    <td class="num">${r.per_1000_good == null ? "—" : "$" + r.per_1000_good.toFixed(2)}</td>
+  </tr>`,
+  )
+  .join("")}
 </tbody></table>
-<p class="sowhat">${
-    s.cheapest && h.rate != null && s.cheapest.rate != null && h.rate <= s.cheapest.rate
-      ? `<b>The person is not the accurate one here.</b> ${s.cheapest.name} reads at ${pct(s.cheapest.rate)}
-         against ${pct(h.rate)} for a human, for ${money(s.cheapest.cost_cents)} instead of
-         $${(h.cost_cents / 100).toFixed(2)} and ${secs(s.cheapest.median_s)} instead of ${secs(h.median_s)}.
-         That is the finding, and it does not remove the human — an attestation is bought because a
-         counterparty will not accept a machine's word, which is a trust cost, not a quality one.
-         Price it as trust and it is honest; price it as accuracy and it is indefensible.`
-      : `Ranked by the bottom of the interval, not the observed rate — a reader that scored perfectly
-         on a handful of documents has earned <b>more measurement, not the title of good enough</b>.`
-  }</p>
-<p class="sowhat">Above the floor, extra spend buys nothing. ${
-    s.readers.filter((r) => r.clears).length > 1 && s.cheapest
-      ? `${s.readers.filter((r) => r.clears).length} agents clear ${(s.floor * 100).toFixed(0)}%, and the
-         dearest of them costs ${Math.round(
-           (s.readers.filter((r) => r.clears).sort((a, b) => b.cost_cents - a.cost_cents)[0].cost_cents /
-             s.cheapest.cost_cents) * 10,
-         ) / 10}× the cheapest for the same measured accuracy. <b>Model choice is a cost decision long
-         before it is a quality one.</b>`
-      : `Once two agents both clear it, the only thing separating them is price and latency.`
-  }</p>
-<p class="src">Token prices: ${s.price_source}, read ${s.prices_as_of}. Cost per document is measured
-token usage at those list rates, not an estimate. A reader shows <span class="dim">unpriced</span>
-rather than free when either its price or its usage is unknown.</p>
+<p class="sowhat"><b>Per correct reading is the number to rank on.</b> A model at half accuracy is not
+half as useful — it is twice as expensive for every answer you can actually use, and a raw price list
+hides that. It is simply what a document costs divided by how often that model gets it right, so a
+reader that never gets one right has no finite price at all.</p>
+<p class="sowhat">The per-1,000 column is priced the same way, so it is what a thousand documents cost
+you in <em>usable</em> readings rather than in attempts.</p>
+<p class="sowhat"><b>Read this ranking with one caveat, and it is the important one.</b> Dividing by
+accuracy assumes you can tell which readings were wrong and pay again for those. You cannot — a model
+that misreads a figure returns it with exactly the same confidence as a correct one, and nothing in the
+output says which is which. So a cheap reader at ${(() => {
+    const g = s.readers.filter((r) => r.cost_per_good != null && r.rate < 1).sort((a,b)=>a.cost_per_good-b.cost_per_good)[0];
+    return g ? pct(g.rate) : "under 100%";
+  })()} is only better value <em>if something else catches its mistakes</em>. That something else is the
+attestation, which is why the two costs below are not alternatives to each other.</p>
+<p class="src">Token prices: ${s.price_source}, read ${s.prices_as_of}. Cost is measured token usage at
+those list rates. <span class="dim">unpriced</span> readers are omitted from this table rather than
+shown as free.</p>
+</div>
+
+<h2>What the people cost</h2>
+<div class="card">
+  <div class="grid">
+    <div><label>Per attestation</label><div class="big">${h.cost_cents == null ? "—" : "$" + (h.cost_cents / 100).toFixed(2)}</div></div>
+    <div><label>Accuracy</label><div class="big">${pct(h.rate)}</div><div class="k">${h.correct}/${h.total} answers</div></div>
+    <div><label>Per correct reading</label><div class="big">${
+      h.rate ? "$" + (h.cost_cents / 100 / h.rate).toFixed(2) : "—"
+    }</div></div>
+    <div><label>Per 1,000 documents</label><div class="big">${
+      h.rate && h.cost_cents ? "$" + Math.round((h.cost_cents / 100 / h.rate) * 1000).toLocaleString() : "—"
+    }</div></div>
+  </div>
+  <p class="sowhat">Kept separate on purpose. <b>People and software are not competing for the same
+  job</b> — the software reads every document either way, and the person is there because a
+  counterparty will not accept software's word. Ranking them in one table would suggest you could
+  drop whichever loses, and you cannot: you are buying a reading from one and a signature from the
+  other.</p>
+</div>
+
+<h2>What would this cost at your volume?</h2>
+<div class="card">
+  <div class="row">
+    <div><label>Documents per deal</label><input id="perdeal" type="number" value="12" min="1"></div>
+    <div><label>Deals a month</label><input id="deals" type="number" value="20" min="1"></div>
+    <div><label>Share needing a signature (%)</label><input id="attest" type="number" value="10" min="0" max="100"></div>
+    <button class="ghost" onclick="vol()">Work it out</button>
+  </div>
+  <div id="volout"></div>
 </div>
 
 <h2>How much evidence would it take to trust one of them?</h2>
@@ -256,6 +306,31 @@ rather than free when either its price or its usage is unknown.</p>
 </div>`;
 
   const script = `
+const BEST = ${JSON.stringify(
+    s.bestValue ? { name: s.bestValue.name, perGood: s.bestValue.cost_per_good } : null,
+  )};
+const HUMAN = ${JSON.stringify(h.cost_cents && h.rate ? { perGood: h.cost_cents / h.rate } : null)};
+function vol(){
+  const docs = (+perdeal.value||0) * (+deals.value||0);
+  const share = Math.min(100, Math.max(0, +attest.value||0)) / 100;
+  const el = document.getElementById("volout");
+  if(!BEST || !docs){ el.innerHTML = '<p class="sowhat">Enter a volume to price it.</p>'; return; }
+  const read = docs * BEST.perGood / 100;
+  const sign = HUMAN ? docs * share * HUMAN.perGood / 100 : null;
+  const usd = v => "$" + v.toLocaleString(undefined,{maximumFractionDigits:2});
+  el.innerHTML = \`
+  <div class="grid" style="margin-top:14px">
+    <div><label>Documents a month</label><div class="big">\${docs.toLocaleString()}</div></div>
+    <div><label>Software reads them all</label><div class="big">\${usd(read)}</div>
+      <div class="k">\${BEST.name}, per correct reading</div></div>
+    <div><label>Signatures on \${Math.round(share*100)}%</label><div class="big">\${sign==null?"—":usd(sign)}</div>
+      <div class="k">\${Math.round(docs*share).toLocaleString()} attestations</div></div>
+    <div><label>Total a month</label><div class="big">\${sign==null?usd(read):usd(read+sign)}</div>
+      <div class="k">\${sign==null?"":Math.round((sign/(read+sign))*100)+"% of it is the signatures"}</div></div>
+  </div>
+  <p class="sowhat">\${sign==null?"":"<b>The reading is not the cost — the signatures are.</b> Software reads every one of those "+docs.toLocaleString()+" documents for "+usd(read)+", and attesting to "+Math.round(share*100)+"% of them costs "+usd(sign)+". Moving that percentage is worth far more than changing model."}</p>\`;
+}
+vol();
 async function target(){
   const r=await fetch("/api/optimize/target",{method:"POST",headers:{"content-type":"application/json"},
     body:JSON.stringify({floor:+floor.value/100,cpiCents:Math.round(+cpi.value*100)})});
