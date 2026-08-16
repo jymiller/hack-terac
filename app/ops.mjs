@@ -3,6 +3,7 @@ import { query } from "./db.mjs";
 import { CERTS, FIELDS, byId } from "./certs.mjs";
 const FIELD_COUNT = 8;
 import {
+  getContext,
   createOpportunity,
   createProject,
   getOpportunity,
@@ -165,6 +166,9 @@ async function opsState() {
       }),
     ),
     checked_at: new Date().toISOString(),
+    balance_cents: await getContext()
+      .then((c) => Math.round(Number(c?.balanceDollars ?? 0) * 100))
+      .catch(() => null),
     total_attestations: certRes.rows.reduce((a, r) => a + Number(r.total ?? 0), 0),
   };
 }
@@ -414,6 +418,27 @@ function opsPage(s) {
 .act .t b{display:block;font-size:14px;margin-bottom:2px}
 .act.go{border-color:var(--warn)}
 .act.on{border-color:var(--ok)}
+.pad{display:flex;gap:22px;align-items:stretch;flex-wrap:wrap;margin-bottom:12px;
+  border:1px solid var(--warn);border-radius:16px;padding:20px;
+  background:radial-gradient(120% 160% at 0% 0%,#241c07 0%,var(--card) 55%)}
+.paddoc{width:150px;flex:none}
+.paddoc img{width:100%;border-radius:8px;border:1px solid var(--line);background:#fff;display:block}
+.padcap{font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.4}
+.padcap span{color:var(--dim);font-size:11px}
+.padbody{flex:1;min-width:300px}
+.padtag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--warn);font-weight:700}
+.padbody h3{font-size:20px;margin:6px 0 16px;letter-spacing:-.01em}
+.padnums{display:flex;gap:26px;flex-wrap:wrap}
+.padnums b{display:block;font-size:21px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.padnums span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.padlink{font-size:12px;color:var(--mut);margin:16px 0 0;word-break:break-all}
+.padgo{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px}
+button.go{background:var(--warn);color:#231a02;font-size:16px;font-weight:700;padding:13px 30px;
+  border-radius:10px;letter-spacing:.02em;box-shadow:0 0 0 0 rgba(251,191,36,.55);animation:pulse 2.4s infinite}
+button.go:hover{filter:brightness(1.06)}
+button.go:disabled{animation:none;box-shadow:none}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(251,191,36,.5)}70%{box-shadow:0 0 0 14px rgba(251,191,36,0)}100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}}
+.padwarn{font-size:12px;color:var(--mut)}
 .quiet{color:var(--dim);font-size:13.5px;padding:14px 16px;border:1px dashed var(--line);border-radius:var(--r)}
 details{border:1px solid var(--line);border-radius:var(--r);background:var(--card);margin-top:12px}
 details summary{cursor:pointer;padding:13px 16px;font-size:12px;text-transform:uppercase;
@@ -495,10 +520,44 @@ reached the document. <b>When those two halves disagree, the gap is what we paid
 <h2>Needs you</h2>
 ${
   draft
-    ? `<div class="act go"><div class="t"><b>Draft ready to launch</b>
-    ${draft.participants} participants · ${money(draft.cost_cents) ?? "price on draft"} · wave <code>${draft.wave}</code>
-    ${draft.dashboard_url ? `<div class="meta"><a href="${draft.dashboard_url}" target="_blank">Review in Terac →</a></div>` : ""}</div>
-    <button onclick="launchIt('${draft.id}')">Launch</button></div>`
+    ? (() => {
+        const certId = (draft.task_url?.match(/[?&]cert=([a-z0-9]+)/) ?? [])[1] ?? null;
+        const cert = certId ? CERTS.find((c) => c.id === certId) : null;
+        const after = s.balance_cents == null ? null : s.balance_cents - Number(draft.cost_cents ?? 0);
+        const short = after != null && after < 0;
+        return `<div class="pad">
+  <div class="paddoc">
+    ${
+      cert
+        ? `<img src="/docs/png/${cert.file}-1.png" alt="${cert.entity}">
+           <div class="padcap">${cert.entity}<br><span>${cert.pages} pages · ${cert.truth.ratio_name}</span></div>`
+        : `<div class="padcap">document assigned by hash</div>`
+    }
+  </div>
+  <div class="padbody">
+    <div class="padtag">Ready to launch</div>
+    <h3>${draft.participants} ${draft.participants === 1 ? "person" : "people"} will read this${cert ? " certificate" : ""}</h3>
+    <div class="padnums">
+      <div><b>${draft.participants}</b><span>readers</span></div>
+      <div><b>${money(draft.cost_cents) ?? "—"}</b><span>total</span></div>
+      <div><b>${draft.minutes ?? "—"} min</b><span>each</span></div>
+      <div><b>${money(s.balance_cents) ?? "—"} → ${money(after) ?? "—"}</b><span>balance</span></div>
+    </div>
+    ${
+      short
+        ? `<div class="banner syn" style="margin:14px 0 0">This costs more than the balance holds. Terac will
+           refuse the launch until the account is topped up.</div>`
+        : ""
+    }
+    <p class="padlink">They will open <a href="${draft.task_url}?teracSubmissionId=preview_pad" target="_blank">${draft.task_url}</a></p>
+    <div class="padgo">
+      <button class="go" onclick="launchIt('${draft.id}')" ${short ? "disabled" : ""}>GO — start recruiting</button>
+      <span class="padwarn">This spends ${money(draft.cost_cents) ?? "money"}. Nothing else on this page does.</span>
+    </div>
+    ${draft.dashboard_url ? `<div class="meta"><a href="${draft.dashboard_url}" target="_blank">Inspect the draft in Terac first →</a></div>` : ""}
+  </div>
+</div>`;
+      })()
     : ""
 }
 ${
