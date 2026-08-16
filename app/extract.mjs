@@ -281,6 +281,12 @@ label{display:block;font-size:13px;font-weight:600;margin:16px 0 3px}
 input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
 button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;border-radius:10px;padding:14px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit}
 .note{font-size:13px;color:var(--mut);margin-top:14px}
+/* Help has to be reachable BEFORE the eight fields, not below the submit button — a reader
+   who is stuck is stuck at field three and will never scroll past the end to find it. */
+.ask{display:block;margin:14px 0 4px;padding:11px 14px;border:1px solid var(--acc);color:var(--acc);
+  border-radius:9px;text-decoration:none;font-size:14px;font-weight:600;text-align:center}
+.ask:hover{background:var(--acc);color:var(--bg)}
+.ask span{display:block;font-weight:400;font-size:12px;opacity:.8;margin-top:2px}
 .warn{background:#fef3c7;color:#78350f;border-radius:8px;padding:10px 12px;font-size:13px;margin:14px 0}
 @media(prefers-color-scheme:dark){.warn{background:#3f2d0a;color:#fde68a}}
 </style></head><body><div class="wrap">
@@ -320,6 +326,10 @@ ${
     <p class="sub" style="margin:6px 0 0">${INSTRUCTION.split("\n")[0]}</p>
     <ol>${INSTRUCTION.split("\n").filter((l) => /^\d\./.test(l.trim())).map((l) => `<li>${l.replace(/^\s*\d\.\s*/, "")}</li>`).join("")}</ol>
     <div class="warn">${INSTRUCTION.split("\n\n").pop().replace(/\n/g, " ").replace('"not stated"', "<strong>not stated</strong>")}</div>
+    <a class="ask" href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}">
+      Text us a question
+      <span>Something unclear or looks wrong? We reply. Your reference ${ref} is filled in for you.</span>
+    </a>
     ${FIELDS.map((f) =>
       f.key === "compliant"
         ? `<label>${f.label} <span class="hint">— ${f.hint}</span></label>
