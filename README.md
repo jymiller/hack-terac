@@ -84,14 +84,11 @@ Total Terac spend across three waves: **$109.52**.
 ### The task an expert actually sees
 ![Task page](docs/screenshots/task-page.png)
 
-### Run log — provenance for every number
-![Run log](docs/screenshots/log.png)
-
-### Recruitment funnel
-![Funnel](docs/screenshots/funnel.png)
-
 ### Operator
 ![Operator](docs/screenshots/ops.png)
+
+The run log and funnel are not pictured: both render identifiers straight from
+the stored readings, which still refer to the superseded documents.
 
 ---
 
