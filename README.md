@@ -87,8 +87,16 @@ Total Terac spend across three waves: **$109.52**.
 ### Operator
 ![Operator](docs/screenshots/ops.png)
 
-The run log and funnel are not pictured: both render identifiers straight from
-the stored readings, which still refer to the superseded documents.
+### Run log — provenance for every number
+![Run log](docs/screenshots/log.png)
+
+### Recruitment funnel
+![Funnel](docs/screenshots/funnel.png)
+
+The board, results and operator shots are the state at the close of the event.
+The run log and funnel are empty because the readings they listed were of the
+retired documents and were cleared when the certificates were replaced — the
+surfaces are intact and will fill again on the first new reading.
 
 ---
 
@@ -133,9 +141,10 @@ real defect found and fixed during the build:
   "the models improved" is honest; "we can say why" is not.
 - **The certificates in this repository are not the ones those readings were
   taken on.** After the event the documents were rebuilt around wholly invented
-  companies (see below), so every recorded reading refers to a superseded
-  document set. The run log's `images_sha` makes that visible rather than
-  letting the two sets be silently conflated.
+  companies (see below). Every recorded reading was of the superseded document
+  set, so the readings were cleared rather than left to be mistaken for evidence
+  about the certificates now in the repository. The figures quoted above are
+  what was measured on the day; the database starts empty.
 
 ---
 
