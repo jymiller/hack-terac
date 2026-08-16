@@ -53,7 +53,10 @@ export async function funnelState(opportunityId) {
   const screened = applied - screenedOut;
   const arrived = subs.filter((s) => opened.has(s.id)).length;
   const submittedN = subs.filter((s) => submitted.has(s.id)).length;
-  const scored = [...submitted.values()].filter((r) => r.total > 0).length;
+  // Count only submissions belonging to THIS opportunity. Counting every human extraction ever
+  // recorded made the last stage larger than the one above it — a funnel that widens at the
+  // bottom, which is both impossible and the first thing anyone looking at it would notice.
+  const scored = subs.filter((s) => (submitted.get(s.id)?.total ?? 0) > 0).length;
 
   const counts = { applied, screened, arrived, submitted: submittedN, scored };
 
