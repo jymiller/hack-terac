@@ -400,7 +400,12 @@ details .inner{padding:0 16px 16px}
   const delivered = w?.delivered ?? 0;
   const committed = (s.waves ?? []).reduce((a, x) => a + Number(x.cost_cents ?? 0), 0);
   const deliveredAll = (s.waves ?? []).reduce((a, x) => a + Number(x.delivered ?? 0), 0);
-  const perUsable = deliveredAll ? committed / deliveredAll : null;
+  // Per WAVE, never blended. Waves have been priced 7x apart, so an all-time average divided
+  // by an all-time delivery count compares nothing to nothing -- and it hid the only number
+  // that mattered, which is that this wave lost none of what it paid for.
+  const perUsable = delivered ? Number(w?.cost_cents ?? 0) / delivered : null;
+  const listCpi = w?.cpi_cents ?? null;
+  const waste = perUsable != null && listCpi ? perUsable - listCpi : null;
   const decidable = s.corpus.filter((c) => c.label === "LICENSED" || c.label === "RULED OUT").length;
 
   const body = `
@@ -418,11 +423,13 @@ details .inner{padding:0 16px 16px}
     <div class="k">${deliveredAll} across every wave</div></div>
   <div><label>Committed</label><div class="big">${money(committed) ?? "$0.00"}</div>
     <div class="k">${w?.cpi_cents ? money(w.cpi_cents) + " per recruit" : "spend is committed at launch"}</div></div>
-  <div><label>Per usable reading</label><div class="big ${perUsable && w?.cpi_cents && perUsable > w.cpi_cents * 2 ? "bad" : ""}">${money(perUsable) ?? "—"}</div>
+  <div><label>Per usable reading</label><div class="big ${waste != null && waste > 0 ? "warn" : waste === 0 ? "ok" : ""}">${money(perUsable) ?? "—"}</div>
     <div class="k">${
-      perUsable && w?.cpi_cents
-        ? `list price is ${money(w.cpi_cents)} — the gap is non-delivery`
-        : "what a reading actually cost"
+      waste == null
+        ? "what a reading actually cost, this wave"
+        : waste === 0
+          ? `exactly list — nothing paid for went undelivered`
+          : `${money(waste)} above the ${money(listCpi)} list price — that gap is non-delivery`
     }</div></div>
   <div><label>Fields decided</label><div class="big">${decidable}<span style="font-size:15px;color:var(--mut)">/${s.corpus.length}</span></div>
     <div class="k">${need} clean readings needed per field</div></div>
@@ -511,9 +518,13 @@ ${s.corpus
     <p class="sowhat"><b>Launch is the only control here that spends money</b>, and stopping later
     does not refund readings already claimed. The price on a draft is Terac's autonomous estimate, not
     the charge — the settled figure is only readable after launch, and the two have differed by 8×.</p>
-    <p class="sowhat">Per usable reading is committed spend divided by readings that actually arrived.
-    <b>When it runs far above the list price, the gap is recruitment that returned nothing</b> — which
-    is a funnel problem, not a pricing one.</p>
+    <p class="sowhat">Per usable reading is this wave's spend divided by the readings that actually
+    arrived from it. <b>When it runs above that wave's own list price, the gap is recruitment that
+    returned nothing</b> — a funnel problem, not a pricing one. It is deliberately never blended
+    across waves: these have been priced sevenfold apart, and an all-time average of that compares
+    nothing to nothing.</p>
+    <p class="sowhat">Across every wave so far: ${money(committed)} committed for ${deliveredAll}
+    readings. Read that as a history, not a rate.</p>
   </div>
 </details>
 
