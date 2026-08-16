@@ -197,22 +197,24 @@ function designPage(s) {
     .join("");
 
   const body = `
-<h1>Experiment Designer</h1>
-<p class="lede">Both arms of the comparison, on the document itself.</p>
-<p class="sub">If the two readers are not really being asked the same question, the agreement number means nothing — so look before you buy.</p>
+<h1>Is this a fair test?</h1>
+<p class="lede">Before we pay anyone, check that the software and the person are being asked the same thing.</p>
+<p class="sub">We compare a person against software on the same certificate. That comparison is only worth
+anything if both were handed the same document and the same question — otherwise a difference in the scores
+just tells you we asked them different things. This page shows exactly what each one was given, so you can
+check that yourself before spending money on it.</p>
 
 <div class="grid">
   <div><label>${esc(cert.entity)}</label><div class="big">${esc(cert.truth.ratio_name)}</div></div>
-  <div><label>Pages · fields</label><div class="big">${cert.pages} <small>pages</small> · ${FIELDS.length} <small>fields</small></div></div>
+  <div><label>Size of the job</label><div class="big">${cert.pages} <small>pages</small> · ${FIELDS.length} <small>fields</small></div></div>
   <div><label>Agent${agent ? ` · ${esc(short(agent.who))}` : ""}</label><div class="big ${agent ? "" : "dim"}">${esc(score(agent))}</div></div>
-  <div><label>Human readings</label><div class="big">${humanCount}</div></div>
+  <div><label>People who have read it</label><div class="big">${humanCount}</div></div>
 </div>
-<p class="sowhat">Both readers answer the same <b>${FIELDS.length} fields on the same ${cert.pages} pages</b>, graded by the same
-function against what the certificate prints — so the two scores above are directly comparable, and neither is yet evidence.
+<p class="sowhat">Both readers answer the same <b>${FIELDS.length} fields on the same ${cert.pages} pages</b>, and we mark both the same way against what the certificate actually prints. So the two scores are directly comparable — though neither is proof of anything yet.
 A handful of readings settles nothing about whether this work can run unattended; what it buys you is a look at <b>where</b>
 the two disagree, which is what the rest of this page is for.</p>
 
-<h2>1 · What are we comparing?</h2>
+<h2>Pick a document</h2>
 <div class="card">
   <form class="row" method="get" action="/design">
     <div><label>Certificate</label><select name="cert">
@@ -220,7 +222,7 @@ the two disagree, which is what the rest of this page is for.</p>
     </select></div>
     ${
       agentChoices.length
-        ? `<div><label>Agent</label><select name="model">
+        ? `<div><label>Software</label><select name="model">
       ${agentChoices.map((m) => `<option value="${esc(m)}"${agent && m === agent.who ? " selected" : ""}>${esc(short(m))}</option>`).join("")}
     </select></div>`
         : ""
@@ -237,7 +239,7 @@ the two disagree, which is what the rest of this page is for.</p>
   <div class="doc">${images.map((src) => `<img src="${src}" alt="Certificate page" loading="lazy">`).join("")}</div>
   <div>
     <div class="shared">
-      <div class="who">Identical instruction · both readers</div>
+      <div class="who">Both get this same wording</div>
       <pre>${esc(INSTRUCTION)}</pre>
       <p class="sowhat">This is one string — <code>INSTRUCTION</code> in <code>app/certs.mjs</code> — rendered into the worker's
       form and sent as the model's prompt, so <b>editing it moves both arms at once and retires every reading taken before the
@@ -245,11 +247,11 @@ the two disagree, which is what the rest of this page is for.</p>
     </div>
 
     <div class="pane agent">
-      <div class="who agent">The agent · ${agent ? esc(short(agent.who)) : "no run on this certificate yet"}</div>
-      <p class="sub"><b>Sees:</b> the ${cert.pages} pages above as images, at full resolution, in one message.</p>
-      <p class="sub"><b>Told:</b> the instruction above, plus the reply format:</p>
+      <div class="who agent">The software · ${agent ? esc(short(agent.who)) : "no run on this certificate yet"}</div>
+      <p class="sub"><b>What it gets:</b> the same ${cert.pages} pages, as pictures, all at once.</p>
+      <p class="sub"><b>What it is asked:</b> the wording above, plus how to format the reply:</p>
       <pre>${esc(SCHEMA_HINT)}</pre>
-      <p class="sub"><b>Answers:</b> once, at temperature 0, with no chance to re-read and no way to ask a question.
+      <p class="sub"><b>How it answers:</b> once, straight through. It cannot go back for another look and it cannot ask us anything.
       Scored ${esc(score(agent))}${agent?.duration_ms ? ` in ${(agent.duration_ms / 1000).toFixed(1)}s` : ""} · cost ≈ $0.</p>
       ${
         agent
@@ -262,11 +264,11 @@ the two disagree, which is what the rest of this page is for.</p>
     </div>
 
     <div class="pane human">
-      <div class="who human">The human · paid participant recruited through Terac</div>
-      <p class="sub"><b>Sees:</b> the same ${cert.pages} pages, in a scrollable panel they can zoom.</p>
-      <p class="sub"><b>Told:</b> the same instruction, as a numbered list beside ${FIELDS.length} empty fields:</p>
+      <div class="who human">The person · paid participant recruited through Terac</div>
+      <p class="sub"><b>What they get:</b> the same ${cert.pages} pages, on screen, and they can zoom in.</p>
+      <p class="sub"><b>What they are asked:</b> the same wording, as a numbered list next to ${FIELDS.length} empty boxes:</p>
       <ol>${FIELDS.map((f) => `<li>${esc(f.label)} <span class="mut">— ${esc(f.hint)}</span></li>`).join("")}</ol>
-      <p class="sub"><b>Answers:</b> free text, once, timed from first paint to submit. Can text support mid-task.
+      <p class="sub"><b>How they answer:</b> typed in, once. We time them from the moment the page loads, and they can text us a question.
       ${humanCount} participant${humanCount === 1 ? " has" : "s have"} read this certificate${
         human ? `; the most recent scored ${esc(score(human))}${human.duration_ms ? ` in ${Math.round(human.duration_ms / 1000)}s` : ""}` : ""
       } · $${(HUMAN_CPI_CENTS / 100).toFixed(2)} each.</p>
@@ -277,7 +279,7 @@ the two disagree, which is what the rest of this page is for.</p>
     </div>
 
     <div class="card">
-      <strong>The asymmetry to be honest about.</strong>
+      <strong>Where the two are not on equal footing</strong>
       <ul>
         <li>Identical pages, identical instruction, identical ${FIELDS.length} fields, scored by the identical function. That is what makes the comparison fair.</li>
         <li>The human can re-read, zoom, and text support. The model answers once and cannot ask. That favours the human.</li>
@@ -292,7 +294,7 @@ the two disagree, which is what the rest of this page is for.</p>
   </div>
 </div>
 
-<h2>Field by field · what each reader reported</h2>
+<h2>What each of them actually answered</h2>
 <div class="card"><table>
 <thead><tr><th>Field</th><th>The document prints</th><th>Agent${agent ? ` · ${esc(short(agent.who))}` : ""}</th><th>Human${
     human ? ` · most recent` : ""
@@ -305,7 +307,7 @@ number the document itself printed. Those are the fields that decide whether thi
 totals this small cannot.</p>
 </div>
 
-<h2>What this document invites you to get wrong</h2>
+<h2>The easy mistakes this document sets up</h2>
 <div class="card">
   ${
     traps
@@ -318,9 +320,10 @@ totals this small cannot.</p>
   }
 </div>
 
-<h2>2 · What do you want to get to?</h2>
+<h2>How much evidence would settle it?</h2>
 <div class="card">
-  <p class="sub" style="margin:0 0 12px">Set the target first, then see what reaching it costs. A design that cannot reach your target is not cheap — it is worthless.</p>
+  <p class="sub" style="margin:0 0 12px">Decide how sure you want to be, then see what that costs. A wave that
+cannot reach the bar you set is not a cheap wave — it is a wasted one.</p>
   <div class="row">
     <div><label>Target floor (%)</label><input id="floor" type="number" value="90" min="50" max="99.5" step="0.5"></div>
     <div><label>Budget ($)</label><input id="budget" type="number" value="125"></div>
@@ -330,5 +333,5 @@ totals this small cannot.</p>
   <div id="tgt"></div>
 </div>`;
 
-  return page({ title: "Experiment Designer", current: "/design", body, extraCss: EXTRA_CSS, script: SCRIPT });
+  return page({ title: "Is this a fair test?", current: "/design", body, extraCss: EXTRA_CSS, script: SCRIPT });
 }
