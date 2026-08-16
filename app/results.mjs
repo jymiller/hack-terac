@@ -168,65 +168,6 @@ const EXTRA_CSS = `
 const VERDICT_TONE = { LICENSED: "ok", "RULED OUT": "bad", "NOT YET": "warn", UNMEASURED: "dim" };
 
 
-/**
- * Cost against accuracy, cost on a log scale because the readers span five orders of
- * magnitude — 0.012c to $12.00. A linear axis would stack every model on the left edge and
- * hide the only shape that matters: accuracy stops improving long before cost stops rising.
- */
-function curve(s) {
-  const pts = s.entrants.filter((e) => e.cost_per_read != null && e.total > 0);
-  if (pts.length < 2) return "";
-  const W = 780, H = 340, L = 54, R = 18, T = 18, B = 46;
-  const lo = Math.min(...pts.map((p) => p.cost_per_read)) / 2;
-  const hi = Math.max(...pts.map((p) => p.cost_per_read)) * 2;
-  const lx = (c) => L + ((Math.log10(c) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (W - L - R);
-  const ly = (r) => T + (1 - r) * (H - T - B);
-
-  const ticks = [];
-  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
-    const v = 10 ** e;
-    if (v < lo || v > hi) continue;
-    ticks.push(`<line x1="${lx(v)}" y1="${T}" x2="${lx(v)}" y2="${H - B}" class="gr"/>
-      <text x="${lx(v)}" y="${H - B + 16}" text-anchor="middle" class="ax">${cmoney(v)}</text>`);
-  }
-  const rows = [0.5, 0.75, 0.9, 1].map(
-    (r) => `<line x1="${L}" y1="${ly(r)}" x2="${W - R}" y2="${ly(r)}" class="${r === 0.9 ? "fl" : "gr"}"/>
-      <text x="${L - 8}" y="${ly(r) + 4}" text-anchor="end" class="ax">${(r * 100).toFixed(0)}%</text>`,
-  );
-
-  const dots = pts
-    .map((p) => {
-      const isH = p.source === "human";
-      const cls = isH ? "ph" : p.source === "walkup" ? "pw" : "pm";
-      const label = isH ? "a person" : short(p.who).replace(/-instruct.*$/, "").slice(0, 22);
-      const x = lx(p.cost_per_read), y = ly(p.rate);
-      const flip = x > W - 190;
-      return `<circle cx="${x}" cy="${y}" r="${isH ? 9 : 6}" class="${cls}"/>
-        <text x="${flip ? x - 12 : x + 12}" y="${y + 4}" text-anchor="${flip ? "end" : "start"}"
-              class="pl ${isH ? "plh" : ""}">${label}</text>`;
-    })
-    .join("");
-
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-    aria-label="Cost per document against accuracy for every reader">
-  <style>
-    .gr{stroke:var(--line);stroke-width:1}
-    .fl{stroke:var(--ok);stroke-width:1;stroke-dasharray:4 4;opacity:.7}
-    .ax{fill:var(--dim);font:10.5px ui-sans-serif,system-ui}
-    .pm{fill:var(--agent);fill-opacity:.9}
-    .ph{fill:var(--acc)}
-    .pw{fill:var(--dim);fill-opacity:.6}
-    .pl{fill:var(--mut);font:11px ui-sans-serif,system-ui}
-    .plh{fill:var(--acc);font-weight:600}
-    .cap{fill:var(--dim);font:10.5px ui-sans-serif,system-ui}
-  </style>
-  ${rows.join("")}${ticks.join("")}
-  <text x="${L}" y="${H - 6}" class="cap">cost of one reading, log scale →</text>
-  <text x="${W - R}" y="${ly(0.9) - 7}" text-anchor="end" class="cap">the 90% bar</text>
-  ${dots}
-  </svg>`;
-}
-
 export function resultsPage(s) {
   const topHuman = s.humans[0];
   const topModel = s.models[0];
@@ -310,26 +251,6 @@ given a JSON reply format that no human is ever shown. Nothing was extracted in 
 ruled out is settled just as firmly and costs far less to reach. Every reader still undecided is an
 unpaid bill — roughly 35 clean readings apiece before an interval is tight enough to decide — and at
 ${cpi} a reading, that bill is the number to budget against.</p>
-
-<h2>What each reading costs, and what it buys</h2>
-<div class="card">${curve(s)}
-<p class="sowhat">${(() => {
-  const m = s.entrants.filter((e) => e.source === "model" && e.cost_per_read != null && e.total);
-  const perfect = m.filter((e) => e.rate === 1).sort((a, b) => a.cost_per_read - b.cost_per_read)[0];
-  const dear = m.slice().sort((a, b) => b.cost_per_read - a.cost_per_read)[0];
-  const cheap = m.slice().sort((a, b) => a.cost_per_read - b.cost_per_read)[0];
-  if (!perfect || !dear || !cheap) return "Not enough priced readers to plot a curve yet.";
-  return `<b>Accuracy stops improving long before cost stops rising.</b> ${short(perfect.who)} reads
-  everything correctly at ${cmoney(perfect.cost_per_read)} a document, while ${short(dear.who)} costs
-  ${Math.round(dear.cost_per_read / perfect.cost_per_read)}× that and reads at ${pct(dear.rate)}. At the
-  other end ${short(cheap.who)} is the cheapest reader here and scores ${pct(cheap.rate)} — cheap is only
-  cheap if it can do the job. <b>Everything to the right of the knee is money spent on nothing.</b>`;
-})()}</p>
-<p class="sowhat">A person sits far off the right of this chart at
-${cmoney(s.cpi_cents)} a reading. <b>They are not there to be more accurate</b> — on this evidence they
-are not — they are there because a counterparty will not take software's word for it. That is the price
-of the signature, not the price of the reading.</p>
-</div>
 
 <h2>Every reader, scored the same way</h2>
 <div class="card">${
