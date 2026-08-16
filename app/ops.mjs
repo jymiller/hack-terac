@@ -132,6 +132,9 @@ async function opsState() {
     floor: FLOOR,
     corpus,
     fields,
+    // Drafts built against a previous host are unlaunchable garbage, and the launch button
+    // cannot be allowed to sit on one. The page needs the current host to tell them apart.
+    app_url: process.env.APP_URL ?? null,
     opportunities: opps.rows,
     completed_tasks: done,
     opened_tasks: opened,
@@ -328,7 +331,6 @@ export function registerOpsRoutes(app) {
 
 function opsPage(s) {
   const live = s.opportunities.find((o) => o.status === "active");
-  const draft = s.opportunities.find((o) => o.status === "draft");
   const need = nMin(s.floor);
   const floorPct = (s.floor * 100).toFixed(0);
   // Tag colour is presentation only: .tag borders in currentColor, so the utility class
@@ -336,6 +338,20 @@ function opsPage(s) {
   const tone = (l) =>
     l === "LICENSED" ? "ok" : l === "RULED OUT" ? "bad" : l === "UNMEASURED" ? "dim" : "warn";
   const statusTone = (st) => (st === "active" ? "ok" : st === "draft" ? "warn" : "dim");
+  // A draft is only launchable if its task_url points at the host we are actually serving.
+  // Drafts left over from the cloudflared tunnel recruit people to a dead address, so they
+  // are listed as stale rather than offered a launch button.
+  const host = (u) => {
+    try {
+      return new URL(u).host;
+    } catch {
+      return null;
+    }
+  };
+  const here = host(s.app_url);
+  const launchable = (o) => here != null && host(o.task_url) === here;
+  const draft = s.opportunities.find((o) => o.status === "draft" && launchable(o));
+  const stale = s.opportunities.filter((o) => o.status === "draft" && !launchable(o));
 
   const extraCss = `
 .row input{width:120px}
@@ -388,23 +404,7 @@ means stop trying. Everything between them is <b>evidence you have not bought ye
 field out costs a fraction of what licensing one costs.</p>
 </div>
 
-<h2>Plan the wave</h2>
-<div class="card">
-  <p class="sub" style="margin-bottom:14px">
-    The participant is the expensive unit, not their time. CPI floors near <b>$9–12</b> and is
-    almost flat in duration above ten minutes, so <b>claims per task</b> — not participant count —
-    is the lever on cost per judgment. Nothing here contacts Terac or spends anything.
-  </p>
-  <div class="row">
-    <div><label>Budget ($)</label><input id="p_budget" type="number" value="125" min="1"></div>
-    <div><label>CPI ($/participant)</label><input id="p_cpi" type="number" value="12" min="0.25" step="0.25"></div>
-    <div><label>Claims / task</label><input id="p_claims" type="number" value="20" min="1" max="60"></div>
-    <button class="ghost" onclick="plan()">Model it</button>
-  </div>
-  <div id="planout" style="margin-top:16px"></div>
-</div>
-
-<h2>Price it with a human</h2>
+<h2>Price — ask a human instead of taking the estimate</h2>
 <div class="card">
   <p class="sub" style="margin-bottom:12px">
     A feasibility request puts a human at Terac on the price, and a confirmed CPI can be bound to a
@@ -424,10 +424,13 @@ field out costs a fraction of what licensing one costs.</p>
 <h2>Dispatch</h2>
 <div class="card">
   <div class="row">
-    <div><label>Participants</label><input id="participants" type="number" value="6" min="1" max="1000"></div>
-    <div><label>Claims / task</label><input id="claimsPerTask" type="number" value="20" min="1" max="60"></div>
-    <div><label>Minutes / task</label><input id="minutes" type="number" value="10" min="1"></div>
+    <div><label>Participants</label><input id="participants" type="number" value="5" min="1" max="1000"></div>
+    <div><label>Minutes</label><input id="minutes" type="number" value="10" min="1"></div>
     <div><label>Window (days, min 5)</label><input id="days" type="number" value="5" min="5"></div>
+    <div><label>Certificate</label><select id="certId">
+      ${CERTS.map((c) => `<option value="${c.id}">${c.id} — ${c.pages}pp</option>`).join("")}
+      <option value="">any (assigned by hash)</option>
+    </select></div>
     <button class="ghost" onclick="draftIt()">Build draft (free)</button>
   </div>
   <pre id="draftout" style="display:none"></pre>
@@ -447,6 +450,15 @@ field out costs a fraction of what licensing one costs.</p>
       : `<p class="sowhat">No draft yet. A draft costs nothing and starts no recruitment, so
     <b>there is no reason to plan a wave you have not drafted</b> — the draft is where Terac first
     tells you a price to argue with.</p>`
+  }
+  ${
+    stale.length
+      ? `<div style="margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:10px">
+      <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">${stale.length} unlaunchable draft${stale.length > 1 ? "s" : ""}</div>
+      <p class="sub" style="margin:6px 0 0">Built against a host we no longer serve, so they would send readers to a dead
+      address. No launch button is offered for them. ${stale.map((o) => `<code>${o.wave}</code>`).join(" ")}</p>
+    </div>`
+      : ""
   }
   ${
     live
@@ -494,34 +506,13 @@ const out=(id,v)=>{const e=document.getElementById(id);e.style.display="block";e
 async function post(u,b){const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});return[r.ok,await r.json()]}
 async function draftIt(){
   out("draftout","building draft…");
-  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,claimsPerTask:+claimsPerTask.value});
+  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,certId:certId.value});
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
 async function feas(){
   out("feasout","requesting human pricing…");
   const[,j]=await post("/api/ops/feasibility",{count:+f_count.value}); out("feasout",j);
 }
-const fmt=c=>"$"+(c/100).toFixed(2);
-async function plan(){
-  const[,j]=await post("/api/ops/plan",{budgetCents:Math.round(+p_budget.value*100),cpiCents:Math.round(+p_cpi.value*100),claimsPerTask:+p_claims.value});
-  const rows=j.sweep.map(o=>{
-    const verdict=o.can_license?'<span class="tag ok">can license</span>':(o.can_rule_out?'<span class="tag warn">rule-out only</span>':'<span class="tag bad">concludes nothing</span>');
-    return \`<tr><td class="num"><b>\${o.claims_per_task}</b></td><td class="num">\${o.participants}</td><td class="num">\${o.judgments}</td>
-      <td class="num">\${o.claims_per_process}</td><td class="num">\${fmt(o.cost_cents)}</td>
-      <td class="num">\${(o.cost_per_judgment_cents/100).toFixed(3)}</td><td>\${verdict}</td></tr>\`;
-  }).join("");
-  const people=j.sweep.length?j.sweep[0].participants:0;
-  document.getElementById("planout").innerHTML=
-    \`<div class="tbl"><table><thead><tr><th class="num">Claims/task</th><th class="num">People</th><th class="num">Judgments</th><th class="num">Claims/process</th><th class="num">Cost</th><th class="num">$/judgment</th><th>Verdict</th></tr></thead><tbody>\${rows}</tbody></table></div>
-     <p class="sowhat"><b>Read the Verdict column first — every row here costs the same, so a row that
-     concludes nothing is the whole budget spent on an answer you cannot use.</b> The budget buys the
-     same \${people} people whichever row you pick, which makes claims per task the only lever that
-     changes what the wave can conclude: a process needs \${j.n_min_to_license} independent claims
-     before even perfect agreement lifts the Wilson lower bound to the \${(100*${FLOOR}).toFixed(0)}% floor.
-     <b>Take the topmost row that says "can license"</b>; if none does, this budget can only rule
-     processes out, and the fix is fewer, longer tasks rather than more people.</p>\`;
-}
-plan();
 async function launchIt(id){
   if(!confirm("Launch this wave? This spends real money from the Terac balance and begins recruiting.")) return;
   const[ok,j]=await post("/api/ops/launch",{opportunityId:id});

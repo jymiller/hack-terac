@@ -28,10 +28,12 @@ async function call(path, { method = "POST", body } = {}) {
  * answer, because a question where nothing rejects screens nobody out and just spends
  * the panel's time. Answers deliberately do not reveal which one qualifies.
  *
- * The second question is the load-bearing one: our corpus withholds a required field on
- * ~18% of claims, so the honest answer there is "not enough information". Someone who
- * guesses anyway, or who goes looking outside the excerpt, produces a confident wrong
- * attestation — the exact failure we are trying to measure in the machine.
+ * There used to be a second question rewarding "the document does not contain enough
+ * information". It was written for the retired claims corpus, which withheld a field on
+ * ~18% of excerpts. On these certificates every one of the eight answers is printed, and
+ * the task page says so — so it screened FOR a behaviour the task never asks for and
+ * primed a zero-work answer that still costs a slot, since the charge lands at launch
+ * whether or not we approve the payout.
  */
 export function opportunityBody({
   projectId,
@@ -65,7 +67,7 @@ export function opportunityBody({
         task_type: "activity",
         // Pays automatically on completion, which requires a task_url whose page redirects to
         // Terac's callback. Ours does. Owner's call: a speed-run therefore cannot be refused
-        // payment, and the defence against one is the screener plus duration_ms, not review.
+        // payment, so the screener and duration_ms are the only defences left, not review.
         review_type: "auto_approve",
         title: `Certificate reading — 8 values to find and report`,
         description:
@@ -87,17 +89,6 @@ export function opportunityBody({
           { text: "5.4, rounded", qualify_logic: "reject" },
           { text: "About 5", qualify_logic: "reject" },
           { text: "Whatever the surrounding text says it should be", qualify_logic: "reject" },
-        ],
-      },
-      {
-        key: "insufficient_behaviour",
-        text: "Suppose you are asked a question about a document, but the document simply does not contain the information needed to answer it. What would you do?",
-        pick: "one",
-        answers: [
-          { text: "Say the document does not contain enough information", qualify_logic: "may" },
-          { text: "Give my best guess based on what is there", qualify_logic: "reject" },
-          { text: "Look the missing information up online", qualify_logic: "reject" },
-          { text: "None of the above", qualify_logic: "reject" },
         ],
       },
     ],
