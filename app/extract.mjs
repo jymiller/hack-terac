@@ -188,7 +188,16 @@ function extractPage({ cert, submissionId, taskId, wave, ref }) {
 h1{font-size:23px;margin:0 0 6px}
 .sub{color:var(--mut);margin:0 0 18px;font-size:14px}
 .cols{display:grid;grid-template-columns:1.45fr 1fr;gap:18px;align-items:start}
-@media(max-width:900px){.cols{grid-template-columns:1fr}}
+/* Recruiting is desktop-only, but a stray small-screen visit must degrade rather than trap the
+   document inside a nested scroller they cannot get out of. */
+@media(max-width:900px){.cols{grid-template-columns:1fr}
+  .doc{position:static;max-height:none;overflow:visible}
+  .pages{overflow:visible}
+  .pages.zoomed{overflow-x:auto}
+  .bar{position:sticky;top:0;background:var(--card);z-index:2}
+  #pp,#pn,#pl{display:none}
+  .smallscreen{display:block}}
+.smallscreen{display:none;font-size:13px;color:var(--mut);margin:-8px 0 16px}
 .doc{background:var(--card);border:1px solid var(--line);border-radius:12px;position:sticky;top:14px;
   display:flex;flex-direction:column;max-height:92vh;overflow:hidden}
 .bar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -213,6 +222,7 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
 </style></head><body><div class="wrap">
 <h1>Read this compliance certificate and report eight things it states</h1>
 <p class="sub">A ${cert.pages}-page compliance certificate is on the left — click it to zoom in. All eight answers are printed in it, so nothing has to be worked out. Most people take 7 to 9 minutes, and there is no time limit.</p>
+<p class="smallscreen">The print on this document is small. If you can, open this task on a laptop or desktop — it will be much easier to read.</p>
 <div class="cols">
   <div class="doc">
     <div class="bar">

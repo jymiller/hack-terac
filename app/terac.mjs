@@ -54,14 +54,19 @@ export function opportunityBody({
     // participants can complete immediately.
     expected_days_to_complete: days,
     unrestricted_audience: true,
-    device_types: ["desktop", "mobile_ios", "mobile_android"],
+    // Desktop only. The task is finding small figures in a dense multi-page scan, and two of
+    // the three certificates put a registered distractor on a LATER page. A phone reader who
+    // cannot comfortably reach page 2 is not careless — we hid the evidence from them, and we
+    // would score it as a trap taken. Omitting this field would allow mobile by default.
+    device_types: ["desktop"],
     tasks: [
       {
         sequence: 1,
         task_type: "activity",
-        // Pays automatically on completion, which requires a task_url whose page
-        // redirects to Terac's callback. Ours does.
-        review_type: "auto_approve",
+        // Submissions land in AWAITING_REVIEW and pay only when we approve. The charge still
+        // happens at LAUNCH — this governs payout, not spend — so it buys the ability to
+        // withhold payment from a speed-run, not a refund on one.
+        review_type: "manual_review",
         title: `Certificate reading — 8 values to find and report`,
         description:
           "Open the certificate, find the eight values listed on the page, and type them in. Answer only from the document shown.",
