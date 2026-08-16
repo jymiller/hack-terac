@@ -123,9 +123,11 @@ export function verifyFixtures() {
 const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
 function asDate(v) {
   const t = String(v).trim().toLowerCase().replace(/(\d)(st|nd|rd|th)\b/, "$1");
-  let m = t.match(/^(\d{1,2})\s+([a-z]{3,})\.?\s+(\d{4})$/);
+  // A real paid reader wrote "30-June-2026". The separator between a day and a spelled-out
+  // month is a formatting choice, not a reading, so hyphens and slashes count as whitespace.
+  let m = t.match(/^(\d{1,2})[\s\-\/.]+([a-z]{3,})\.?[\s\-\/.]+(\d{4})$/);
   if (m) { const i = MONTHS.findIndex((x) => x.startsWith(m[2].slice(0, 3))); if (i >= 0) return `${m[3]}-${String(i + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
-  m = t.match(/^([a-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+  m = t.match(/^([a-z]{3,})\.?[\s\-\/.]+(\d{1,2}),?[\s\-\/.]+(\d{4})$/);
   if (m) { const i = MONTHS.findIndex((x) => x.startsWith(m[1].slice(0, 3))); if (i >= 0) return `${m[3]}-${String(i + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`; }
   m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
   if (m) { let d = +m[1], mo = +m[2]; if (mo > 12 && d <= 12) [d, mo] = [mo, d];
