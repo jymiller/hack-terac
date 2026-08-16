@@ -157,6 +157,7 @@ async function opsState() {
           return {
             ...w,
             terac_status: o.status ?? null,
+            terac_title: o.title ?? null,
             terac_stats: o.submission_stats ?? null,
             terac_url: o.links?.dashboard?.submissions ?? w.dashboard_url ?? null,
           };
@@ -575,6 +576,47 @@ ${
     : ""
 }
 ${!draft && !live && !stale.length ? `<div class="quiet">Nothing needs you. Build a draft below to start a wave.</div>` : ""}
+
+<h2>Waves</h2>
+<div class="card"><div class="tbl"><table>
+<thead><tr><th>Wave</th><th>Document</th><th>State</th><th class="num">Paid for</th>
+<th class="num">Delivered</th><th class="num">Cost</th><th></th></tr></thead>
+<tbody>
+${
+  (s.waves ?? []).length
+    ? (s.waves ?? [])
+        .map((w) => {
+          const certId = (w.task_url?.match(/[?&]cert=([a-z0-9]+)/) ?? [])[1] ?? null;
+          const cert = certId ? CERTS.find((c) => c.id === certId) : null;
+          const st = w.terac_status ?? w.status;
+          const say = {
+            active: ["Recruiting now", "ok"],
+            fulfilled: ["Done recruiting", "dim"],
+            completed: ["Done recruiting", "dim"],
+            stopped: ["Stopped early", "warn"],
+            paused: ["Paused", "warn"],
+          }[st] ?? [st, "dim"];
+          return `<tr>
+    <td><code>${w.wave}</code>${
+      w.terac_title ? `<div class="dim" style="font-size:11.5px">${w.terac_title}</div>` : ""
+    }</td>
+    <td>${cert ? cert.entity : '<span class="dim">assigned by hash</span>'}</td>
+    <td><span class="tag ${say[1]}">${say[0]}</span></td>
+    <td class="num">${w.participants ?? "—"}</td>
+    <td class="num">${w.delivered ?? 0}</td>
+    <td class="num">${money(w.cost_cents) ?? "—"}</td>
+    <td>${w.terac_url ? `<a href="${w.terac_url}" target="_blank">Terac →</a>` : ""}</td>
+  </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="7" class="dim">No wave has been launched yet.</td></tr>`
+}
+</tbody></table></div>
+<p class="sowhat">State comes from Terac on every page load, not from our own record — ours is written at
+launch and never updated, so it went on saying "recruiting" for a wave that had already finished.
+<b>A wave that is done recruiting cannot be stopped and does not need to be</b>; the money was committed
+when it started, and what it bought is the Delivered column.</p>
+</div>
 
 <h2>Can we stop paying humans to read this?</h2>
 <div class="card"><div class="tbl"><table>
