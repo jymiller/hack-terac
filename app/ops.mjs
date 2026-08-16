@@ -131,6 +131,9 @@ async function opsState() {
     floor: FLOOR,
     corpus,
     fields,
+    // Drafts built against a previous host are unlaunchable garbage, and the launch button
+    // cannot be allowed to sit on one. The page needs the current host to tell them apart.
+    app_url: process.env.APP_URL ?? null,
     opportunities: opps.rows,
     completed_tasks: done,
     opened_tasks: opened,
@@ -327,8 +330,20 @@ export function registerOpsRoutes(app) {
 
 function opsPage(s) {
   const live = s.opportunities.find((o) => o.status === "active");
-  const draft = s.opportunities.find((o) => o.status === "draft");
-  const pct = (x) => (x == null ? "—" : (x * 100).toFixed(1) + "%");
+  // A draft is only launchable if its task_url points at the host we are actually serving.
+  // Drafts left over from the cloudflared tunnel recruit people to a dead address, so they
+  // are listed as stale rather than offered a launch button.
+  const host = (u) => {
+    try {
+      return new URL(u).host;
+    } catch {
+      return null;
+    }
+  };
+  const here = host(s.app_url);
+  const launchable = (o) => here != null && host(o.task_url) === here;
+  const draft = s.opportunities.find((o) => o.status === "draft" && launchable(o));
+  const stale = s.opportunities.filter((o) => o.status === "draft" && !launchable(o));
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Coverage Engine — Operator</title><style>
@@ -385,22 +400,6 @@ ${s.corpus
 <p class="sub" style="margin:12px 0 0">A certificate nobody has extracted reports 0.000 by construction — it cannot inherit readiness it has not been measured for.</p>
 </div>
 
-<h2>Plan — what a wave can actually buy</h2>
-<div class="card">
-  <p class="sub" style="margin:0 0 14px">
-    The participant is the expensive unit, not their time. CPI floors near <strong>$9–12</strong> and is
-    almost flat in duration above ten minutes, so <strong>claims per task</strong> — not participant count —
-    is the lever on cost per judgment. Nothing here contacts Terac or spends anything.
-  </p>
-  <div class="row">
-    <div><label>Budget ($)</label><input id="p_budget" type="number" value="125" min="1"></div>
-    <div><label>CPI ($/participant)</label><input id="p_cpi" type="number" value="12" min="0.25" step="0.25"></div>
-    <div><label>Claims / task</label><input id="p_claims" type="number" value="20" min="1" max="60"></div>
-    <button class="ghost" onclick="plan()">Model it</button>
-  </div>
-  <div id="planout" style="margin-top:14px"></div>
-</div>
-
 <h2>Price — ask a human instead of taking the estimate</h2>
 <div class="card">
   <p class="sub" style="margin:0 0 12px">
@@ -418,9 +417,8 @@ ${s.corpus
 <h2>Dispatch a calibration wave</h2>
 <div class="card">
   <div class="row">
-    <div><label>Participants</label><input id="participants" type="number" value="6" min="1" max="1000"></div>
-    <div><label>Claims / task</label><input id="claimsPerTask" type="number" value="20" min="1" max="60"></div>
-    <div><label>Minutes / task</label><input id="minutes" type="number" value="10" min="1"></div>
+    <div><label>Participants</label><input id="participants" type="number" value="5" min="1" max="1000"></div>
+    <div><label>Minutes</label><input id="minutes" type="number" value="10" min="1"></div>
     <div><label>Window (days, min 5)</label><input id="days" type="number" value="5" min="5"></div>
     <div><label>Certificate</label><select id="certId">
       ${CERTS.map((c) => `<option value="${c.id}">${c.id} — ${c.pages}pp</option>`).join("")}
@@ -439,6 +437,15 @@ ${s.corpus
       <div style="margin-top:12px"><button onclick="launchIt('${draft.id}')">Launch — begin recruiting</button></div>
     </div>`
       : `<p class="sub" style="margin:12px 0 0">No draft yet. A draft costs nothing and starts no recruitment.</p>`
+  }
+  ${
+    stale.length
+      ? `<div style="margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:10px">
+      <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">${stale.length} unlaunchable draft${stale.length > 1 ? "s" : ""}</div>
+      <p class="sub" style="margin:6px 0 0">Built against a host we no longer serve, so they would send readers to a dead
+      address. No launch button is offered for them. ${stale.map((o) => `<code>${o.wave}</code>`).join(" ")}</p>
+    </div>`
+      : ""
   }
   ${
     live
@@ -473,29 +480,13 @@ const out=(id,v)=>{const e=document.getElementById(id);e.style.display="block";e
 async function post(u,b){const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});return[r.ok,await r.json()]}
 async function draftIt(){
   out("draftout","building draft…");
-  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,claimsPerTask:+claimsPerTask.value,certId:certId.value});
+  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,certId:certId.value});
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
 async function feas(){
   out("feasout","requesting human pricing…");
   const[,j]=await post("/api/ops/feasibility",{count:+f_count.value}); out("feasout",j);
 }
-const fmt=c=>"$"+(c/100).toFixed(2);
-async function plan(){
-  const[,j]=await post("/api/ops/plan",{budgetCents:Math.round(+p_budget.value*100),cpiCents:Math.round(+p_cpi.value*100),claimsPerTask:+p_claims.value});
-  const rows=j.sweep.map(o=>{
-    const verdict=o.can_license?'<span class="ok">can license</span>':(o.can_rule_out?'<span class="warn">rule-out only</span>':'<span class="bad">concludes nothing</span>');
-    return \`<tr><td><strong>\${o.claims_per_task}</strong></td><td>\${o.participants}</td><td>\${o.judgments}</td>
-      <td>\${o.claims_per_process}</td><td>\${fmt(o.cost_cents)}</td>
-      <td>\${(o.cost_per_judgment_cents/100).toFixed(3)}</td><td>\${verdict}</td></tr>\`;
-  }).join("");
-  document.getElementById("planout").innerHTML=
-    \`<table><tr><th>Claims/task</th><th>People</th><th>Judgments</th><th>Claims/process</th><th>Cost</th><th>$/judgment</th><th>Verdict</th></tr>\${rows}</table>
-     <p class="sub" style="margin:12px 0 0">A process needs <strong>\${j.n_min_to_license} independent claims</strong> before even perfect agreement
-     can push the Wilson lower bound to the \${(100*${FLOOR}).toFixed(0)}% floor. Below that, a wave can rule a process out but can never license one —
-     so buying fewer, longer tasks is what makes licensing reachable at all.</p>\`;
-}
-plan();
 async function launchIt(id){
   if(!confirm("Launch this wave? This spends real money from the Terac balance and begins recruiting.")) return;
   const[ok,j]=await post("/api/ops/launch",{opportunityId:id});
