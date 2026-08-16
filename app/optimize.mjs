@@ -276,7 +276,7 @@ async function target(){
 target();
 `;
 
-  return page({ title: "Reader economics", current: "/optimize", body, extraCss: EXTRA_CSS, script });
+  return page({ title: "Reader economics", current: "/", body, extraCss: EXTRA_CSS, script });
 }
 
 export function registerOptimizeRoutes(app) {
@@ -309,7 +309,10 @@ export function registerOptimizeRoutes(app) {
     }
   });
 
-  app.get("/optimize", async (_req, res) => {
+  // The root is the strongest page: what a read costs. /optimize stays as an alias so any
+  // link already handed out keeps working.
+  for (const path of ["/", "/optimize"])
+  app.get(path, async (_req, res) => {
     try {
       res.type("html").send(optimizePage(await optimizeState()));
     } catch (err) {

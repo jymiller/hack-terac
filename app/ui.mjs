@@ -98,13 +98,16 @@ select:focus,input:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 `;
 
+// Order is the argument: what a read costs, then who reads well, then whether the comparison
+// was fair, then what recruitment leaked, then the controls. "Coverage" was renamed because
+// nobody could say what a coverage engine was, including the person who commissioned it.
 const TABS = [
-  ["/", "Coverage"],
-  ["/ops", "Operator"],
+  ["/", "Economics"],
+  ["/results", "Evaluations"],
   ["/design", "Designer"],
   ["/funnel", "Funnel"],
-  ["/results", "Results"],
-  ["/optimize", "Economics"],
+  ["/readiness", "Readiness"],
+  ["/ops", "Operator"],
   ["/support", "Support"],
 ];
 

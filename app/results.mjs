@@ -270,7 +270,7 @@ ${cpi} a reading, that bill is the number to budget against.</p>
 </div>`;
 
   return page({
-    title: "Results — human and agent on the same documents",
+    title: "Evaluations — every reader on the same documents",
     current: "/results",
     body,
     extraCss: EXTRA_CSS,

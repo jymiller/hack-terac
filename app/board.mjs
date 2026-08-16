@@ -210,7 +210,7 @@ nothing about.</p>`;
 
   return page({
     title: "Coverage Engine",
-    current: "/",
+    current: "/readiness",
     body,
     extraCss: `.tag{white-space:nowrap}td .chip{margin:0 4px 3px 0}`,
     script: `setInterval(()=>location.reload(),20000)`,

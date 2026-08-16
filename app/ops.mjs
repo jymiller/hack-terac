@@ -86,7 +86,7 @@ const money = (c) => (c == null ? null : `$${(c / 100).toFixed(2)}`);
 
 async function opsState() {
   await ensureSchema();
-  const [certRes, fieldRes, opps, openRes] = await Promise.all([
+  const [certRes, fieldRes, opps, openRes, waveRes] = await Promise.all([
     query(`select cert_id, count(*)::int as n,
                   sum(correct)::int as correct, sum(total)::int as total
              from extractions where source = 'human' group by 1`),
@@ -94,6 +94,14 @@ async function opsState() {
     query(`select * from terac_opportunities order by created_at desc limit 5`),
     query(`select payload->>'status' as status, count(*)::int as n
              from terac_responses group by 1`),
+    // Delivery per launched wave, from our own tables only. The funnel page joins Terac's
+    // side for applied/screened; an operator glance does not need a network call to answer
+    // "did the people we paid for turn up".
+    query(`select o.wave, o.participants, o.cost_cents, o.cpi_cents, o.status,
+             (select count(*)::int from terac_responses r where r.payload->>'wave' = o.wave) arrived,
+             (select count(*)::int from extractions e where e.wave = o.wave and e.source='human') delivered
+             from terac_opportunities o where o.launched_at is not null
+             order by o.launched_at desc`),
   ]);
 
   // Per-field correctness across every human extraction.
@@ -138,6 +146,7 @@ async function opsState() {
     opportunities: opps.rows,
     completed_tasks: done,
     opened_tasks: opened,
+    waves: waveRes.rows,
     total_attestations: certRes.rows.reduce((a, r) => a + Number(r.total ?? 0), 0),
   };
 }
@@ -354,151 +363,180 @@ function opsPage(s) {
   const stale = s.opportunities.filter((o) => o.status === "draft" && !launchable(o));
 
   const extraCss = `
-.row input{width:120px}
-.callout{margin:18px 0 0}
-.callout .line{color:var(--fg);font-size:14px;margin-top:6px}
-.callout .meta{color:var(--mut);font-size:12px;margin-top:5px;word-break:break-all}
-.callout h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:600;margin:0}
+.row input{width:110px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.strip > div{background:var(--card);padding:16px}
+.strip .big{font-size:28px}
+.strip .k{font-size:11.5px;color:var(--dim);margin-top:5px}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--ok);
+  margin-right:7px;vertical-align:1px}
+.mini{display:flex;gap:2px;align-items:stretch;margin-top:12px}
+.mini > div{flex:1;background:var(--card);border:1px solid var(--line);padding:11px 13px;border-radius:8px}
+.mini .n{font-size:21px;font-variant-numeric:tabular-nums;font-weight:600}
+.mini .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.mini .d{font-size:11.5px;color:var(--bad);margin-top:4px}
+.act{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 16px;border-radius:var(--r);
+  border:1px solid var(--line);background:var(--card);margin-bottom:10px}
+.act .t{flex:1;min-width:240px;font-size:13.5px}
+.act .t b{display:block;font-size:14px;margin-bottom:2px}
+.act.go{border-color:var(--warn)}
+.act.on{border-color:var(--ok)}
+.quiet{color:var(--dim);font-size:13.5px;padding:14px 16px;border:1px dashed var(--line);border-radius:var(--r)}
+details{border:1px solid var(--line);border-radius:var(--r);background:var(--card);margin-top:12px}
+details summary{cursor:pointer;padding:13px 16px;font-size:12px;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--mut);font-weight:600;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"› ";display:inline-block;transition:transform .15s}
+details[open] summary::before{transform:rotate(90deg)}
+details .inner{padding:0 16px 16px}
 .tbl{overflow-x:auto}
+.callout .meta{color:var(--mut);font-size:12px;margin-top:5px;word-break:break-all}
 `;
+
+  const w = s.waves?.[0] ?? null;
+  const paid = w?.participants ?? 0;
+  const arrived = w?.arrived ?? 0;
+  const delivered = w?.delivered ?? 0;
+  const committed = (s.waves ?? []).reduce((a, x) => a + Number(x.cost_cents ?? 0), 0);
+  const deliveredAll = (s.waves ?? []).reduce((a, x) => a + Number(x.delivered ?? 0), 0);
+  const perUsable = deliveredAll ? committed / deliveredAll : null;
+  const decidable = s.corpus.filter((c) => c.label === "LICENSED" || c.label === "RULED OUT").length;
 
   const body = `
 <h1>Operator</h1>
-<p class="lede">Plan a calibration wave against a budget, price it with a human, and dispatch it.</p>
-<p class="sub">Readiness is the Wilson 95% lower bound over independent field judgements, against a
-${floorPct}% floor. Everything on this page is free except <b>Launch</b>.</p>
+<p class="sub" style="margin-bottom:18px">${
+    live
+      ? `<span class="live-dot"></span>Wave <code>${live.wave}</code> is recruiting.`
+      : draft
+        ? "A draft is ready. Nothing is recruiting."
+        : "Nothing is recruiting."
+  } Everything here is free except <b>Launch</b>.</p>
 
-<h2>Evidence on hand</h2>
-<div class="grid">
-  <div><label>Fields judged</label><div class="big">${s.total_attestations}</div></div>
-  <div><label>Completed tasks</label><div class="big">${s.completed_tasks}</div></div>
-  <div><label>Tasks opened</label><div class="big">${s.opened_tasks}</div></div>
-  <div><label>Certificates</label><div class="big">${s.corpus.length}</div></div>
+<div class="strip">
+  <div><label>Delivered, this wave</label><div class="big">${delivered}<span style="font-size:15px;color:var(--mut)">/${paid || "—"}</span></div>
+    <div class="k">${deliveredAll} across every wave</div></div>
+  <div><label>Committed</label><div class="big">${money(committed) ?? "$0.00"}</div>
+    <div class="k">${w?.cpi_cents ? money(w.cpi_cents) + " per recruit" : "spend is committed at launch"}</div></div>
+  <div><label>Per usable reading</label><div class="big ${perUsable && w?.cpi_cents && perUsable > w.cpi_cents * 2 ? "bad" : ""}">${money(perUsable) ?? "—"}</div>
+    <div class="k">${
+      perUsable && w?.cpi_cents
+        ? `list price is ${money(w.cpi_cents)} — the gap is non-delivery`
+        : "what a reading actually cost"
+    }</div></div>
+  <div><label>Fields decided</label><div class="big">${decidable}<span style="font-size:15px;color:var(--mut)">/${s.corpus.length}</span></div>
+    <div class="k">${need} clean readings needed per field</div></div>
 </div>
-<p class="sowhat">Judgments, not participants, are what buy readiness: <b>a field needs ${need}
-independent clean readings before even perfect agreement can license it</b>. Read Fields judged
-against that bar to see how many fields this console could decide today, and read Tasks opened
-against Completed — that gap is recruitment already paid for that returned no evidence.</p>
 
-<h2>Certificates</h2>
+<div class="mini">
+  <div><div class="n">${paid}</div><div class="l">Paid for</div></div>
+  <div><div class="n">${arrived}</div><div class="l">Opened the task</div>${
+    paid - arrived > 0 ? `<div class="d">−${paid - arrived} never arrived</div>` : ""
+  }</div>
+  <div><div class="n">${delivered}</div><div class="l">Delivered</div>${
+    arrived - delivered > 0 ? `<div class="d">−${arrived - delivered} abandoned</div>` : ""
+  }</div>
+</div>
+
+<h2>Needs you</h2>
+${
+  draft
+    ? `<div class="act go"><div class="t"><b>Draft ready to launch</b>
+    ${draft.participants} participants · ${money(draft.cost_cents) ?? "price on draft"} · wave <code>${draft.wave}</code>
+    ${draft.dashboard_url ? `<div class="meta"><a href="${draft.dashboard_url}" target="_blank">Review in Terac →</a></div>` : ""}</div>
+    <button onclick="launchIt('${draft.id}')">Launch</button></div>`
+    : ""
+}
+${
+  live
+    ? `<div class="act on"><div class="t"><b>Recruiting now</b>
+    ${live.participants} participants · ${money(live.cost_cents) ?? ""} · <code>${live.wave}</code></div>
+    <button class="danger" onclick="stopIt('${live.id}')">Stop</button></div>`
+    : ""
+}
+${
+  stale.length
+    ? `<div class="act"><div class="t"><b>${stale.length} draft${stale.length > 1 ? "s" : ""} cannot be launched</b>
+    Built against a host we no longer serve — they would send readers to a dead address.
+    ${stale.map((o) => `<code>${o.wave}</code>`).join(" ")}</div></div>`
+    : ""
+}
+${!draft && !live && !stale.length ? `<div class="quiet">Nothing needs you. Build a draft below to start a wave.</div>` : ""}
+
+<h2>Readiness by certificate</h2>
 <div class="card"><div class="tbl"><table>
-<thead><tr><th>Certificate</th><th>Primary ratio</th><th class="num">Fields</th>
-<th class="num">Extractions</th><th class="num">Fields correct</th><th>Readiness</th><th>Evidence</th></tr></thead>
+<thead><tr><th>Certificate</th><th class="num">Readings</th><th class="num">Fields correct</th>
+<th>Readiness</th><th>Evidence</th></tr></thead>
 <tbody>
 ${s.corpus
   .map(
     (c) => `<tr>
-  <td>${c.name}</td><td class="mut">${c.expertise_area}</td>
-  <td class="num">${c.claims}</td><td class="num">${c.rated_claims}</td><td class="num">${c.agreed}</td>
+  <td>${c.name}<div class="dim" style="font-size:12px">${c.expertise_area}</div></td>
+  <td class="num">${c.rated_claims}</td><td class="num">${c.agreed}/${c.judgments}</td>
   <td><b>${c.theta.toFixed(3)}</b> <span class="tag ${tone(c.label)}">${c.label}</span></td>
   <td><span class="tag ${c.evidence_mode === "live" ? "ok" : "warn"}">${c.evidence_mode.toUpperCase()}</span></td>
 </tr>`,
   )
   .join("")}
 </tbody>
-</table></div>
-<p class="sowhat">Readiness is a lower bound, so <b>0.000 means unmeasured, not unreliable</b> — a
-certificate nobody has extracted cannot inherit readiness it was never tested for. Only two labels
-change what you do: LICENSED means stop paying a human to read that certificate's fields, RULED OUT
-means stop trying. Everything between them is <b>evidence you have not bought yet</b>, and ruling a
-field out costs a fraction of what licensing one costs.</p>
-</div>
+</table></div></div>
 
-<h2>Price — ask a human instead of taking the estimate</h2>
-<div class="card">
-  <p class="sub" style="margin-bottom:12px">
-    A feasibility request puts a human at Terac on the price, and a confirmed CPI can be bound to a
-    draft — the only way to argue this task is simpler, and cheaper, than it looks. Costs nothing.
-  </p>
-  <div class="row">
-    <div><label>Participants to price</label><input id="f_count" type="number" value="10" min="1"></div>
-    <button class="ghost" onclick="feas()">Request human pricing</button>
-  </div>
-  <pre id="feasout" style="display:none"></pre>
-  <p class="sowhat"><b>A draft price is an autonomous estimate, not what Terac charges</b> — the last
-  wave was drafted at one price and settled far below it. So a wave sized against the estimate can be
-  wrong about what the budget buys before a single reader is recruited. If a confirmed price comes
-  back different, re-run the plan above before drafting: it changes which verdict row you can afford.</p>
-</div>
-
-<h2>Dispatch</h2>
+<h2>Dispatch a wave</h2>
 <div class="card">
   <div class="row">
     <div><label>Participants</label><input id="participants" type="number" value="5" min="1" max="1000"></div>
     <div><label>Minutes</label><input id="minutes" type="number" value="10" min="1"></div>
-    <div><label>Window (days, min 5)</label><input id="days" type="number" value="5" min="5"></div>
+    <div><label>Window (days)</label><input id="days" type="number" value="5" min="5"></div>
     <div><label>Certificate</label><select id="certId">
       ${CERTS.map((c) => `<option value="${c.id}">${c.id} — ${c.pages}pp</option>`).join("")}
       <option value="">any (assigned by hash)</option>
     </select></div>
-    <button class="ghost" onclick="draftIt()">Build draft (free)</button>
+    <button class="ghost" onclick="draftIt()">Build draft</button>
+    <div><label>Price check</label><input id="f_count" type="number" value="10" min="1"></div>
+    <button class="ghost" onclick="feas()">Ask Terac to price it</button>
   </div>
   <pre id="draftout" style="display:none"></pre>
-  ${
-    draft
-      ? `<div class="banner syn callout">
-      <h3>Draft ready — launching spends real money</h3>
-      <div class="line"><b>${draft.participants}</b> participants · <b>${money(draft.cost_cents) ?? "price on draft"}</b> · wave <code>${draft.wave}</code></div>
-      <div class="meta">task_url: ${draft.task_url}</div>
-      ${draft.dashboard_url ? `<div class="meta"><a href="${draft.dashboard_url}" target="_blank">Review draft in Terac dashboard →</a></div>` : ""}
-      <div style="margin-top:12px"><button onclick="launchIt('${draft.id}')">Launch — begin recruiting</button></div>
-    </div>
-    <p class="sowhat">This is the last free step. <b>Launch is the only control on this page that
-    spends money</b>, and stopping later does not refund readings already claimed. The figure above is
-    the draft estimate rather than the charge — the settled number is only read back after launch — so
-    decide on the shape of the wave, not on that price.</p>`
-      : `<p class="sowhat">No draft yet. A draft costs nothing and starts no recruitment, so
-    <b>there is no reason to plan a wave you have not drafted</b> — the draft is where Terac first
-    tells you a price to argue with.</p>`
-  }
-  ${
-    stale.length
-      ? `<div style="margin-top:14px;padding:12px;border:1px dashed var(--line);border-radius:10px">
-      <div style="font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">${stale.length} unlaunchable draft${stale.length > 1 ? "s" : ""}</div>
-      <p class="sub" style="margin:6px 0 0">Built against a host we no longer serve, so they would send readers to a dead
-      address. No launch button is offered for them. ${stale.map((o) => `<code>${o.wave}</code>`).join(" ")}</p>
-    </div>`
-      : ""
-  }
-  ${
-    live
-      ? `<div class="banner live callout">
-      <h3>Live · recruiting</h3>
-      <div class="line"><code>${live.id}</code> · ${live.participants} participants · ${money(live.cost_cents) ?? ""}</div>
-      <div style="margin-top:12px"><button class="danger" onclick="stopIt('${live.id}')">Stop recruiting</button></div>
-    </div>
-    <p class="sowhat"><b>The cost is already committed; what is still open is whether the readings
-    arrive.</b> Stop when Fields judged at the top of this page has moved far enough to decide a
-    field — not when the wave merely looks slow. Stopping early keeps the money already spent and
-    forfeits the evidence it was meant to buy.</p>`
-      : ""
-  }
+  <pre id="feasout" style="display:none"></pre>
 </div>
 
-<h2>Wave ledger</h2>
-<div class="card"><div class="tbl"><table>
-<thead><tr><th>ID</th><th>Wave</th><th>Status</th><th class="num">Participants</th>
-<th class="num">Cost</th><th class="num">Created</th></tr></thead>
-<tbody>
-${
-  s.opportunities.length
-    ? s.opportunities
-        .map(
-          (o) => `<tr><td><code>${o.id.slice(0, 12)}…</code></td><td>${o.wave}</td>
-    <td><span class="tag ${statusTone(o.status)}">${o.status}</span></td>
-    <td class="num">${o.participants ?? "—"}</td><td class="num">${money(o.cost_cents) ?? "—"}</td>
-    <td class="num mut">${new Date(o.created_at).toLocaleTimeString()}</td></tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="6" class="dim">none yet</td></tr>`
-}
-</tbody>
-</table></div>
-<p class="sowhat">This is the spend ledger, not the evidence: <b>a wave's cost is committed the
-moment its status reads active</b>, and nothing in these columns says whether the readings arrived.
-Read cost here against Fields judged at the top — a wave that cost money without moving that counter
-is the one to stop, and the reason to buy more claims per task next time rather than more people.</p>
-</div>
+<details>
+  <summary>How to read this page</summary>
+  <div class="inner">
+    <p class="sowhat">Readiness is a Wilson 95% lower bound, so <b>0.000 means unmeasured, not
+    unreliable</b> — a certificate nobody has read cannot inherit readiness it was never tested for.
+    Only two labels change what you do: LICENSED means stop paying a human to read those fields,
+    RULED OUT means stop trying. Everything between is <b>evidence you have not bought yet</b>.</p>
+    <p class="sowhat">A field needs <b>${need} independent clean readings</b> before even perfect
+    agreement can license it, which is why judgments rather than participants are what buy readiness.</p>
+    <p class="sowhat"><b>Launch is the only control here that spends money</b>, and stopping later
+    does not refund readings already claimed. The price on a draft is Terac's autonomous estimate, not
+    the charge — the settled figure is only readable after launch, and the two have differed by 8×.</p>
+    <p class="sowhat">Per usable reading is committed spend divided by readings that actually arrived.
+    <b>When it runs far above the list price, the gap is recruitment that returned nothing</b> — which
+    is a funnel problem, not a pricing one.</p>
+  </div>
+</details>
+
+<details>
+  <summary>Wave ledger</summary>
+  <div class="inner"><div class="tbl"><table>
+  <thead><tr><th>Wave</th><th>Status</th><th class="num">Participants</th>
+  <th class="num">Cost</th><th class="num">Created</th></tr></thead>
+  <tbody>
+  ${
+    s.opportunities.length
+      ? s.opportunities
+          .map(
+            (o) => `<tr><td>${o.wave}</td>
+      <td><span class="tag ${statusTone(o.status)}">${o.status}</span></td>
+      <td class="num">${o.participants ?? "—"}</td><td class="num">${money(o.cost_cents) ?? "—"}</td>
+      <td class="num mut">${new Date(o.created_at).toLocaleTimeString()}</td></tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="5" class="dim">none yet</td></tr>`
+  }
+  </tbody></table></div></div>
+</details>
 `;
 
   const script = `
@@ -529,7 +567,7 @@ setInterval(async()=>{
 `;
 
   return page({
-    title: "Coverage Engine — Operator",
+    title: "Operator",
     current: "/ops",
     body,
     extraCss,

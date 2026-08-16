@@ -300,7 +300,7 @@ async function coverage() {
 
 app.get("/api/coverage", async (_req, res) => res.json(await coverage()));
 
-app.get("/", async (_req, res) => {
+app.get("/readiness", async (_req, res) => {
   try {
     res.type("html").send(boardPage(await boardState()));
   } catch (err) {
