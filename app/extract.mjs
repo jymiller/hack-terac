@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { query } from "./db.mjs";
 import { CERTS, FIELDS, INSTRUCTION, byId, scoreAnswer, verifyFixtures } from "./certs.mjs";
 import { refFor, supportNumber } from "./support.mjs";
+import { imageManifest, logRun } from "./explog.mjs";
 
 let ready = null;
 function ensureSchema() {
@@ -210,14 +211,31 @@ alongside the model runs on the same document.</p>
       }
 
       const answers = Object.fromEntries(FIELDS.map((f) => [f.key, b[f.key] ?? ""]));
-      await recordExtraction({
+      const durationMs = Number(b.durationMs) || null;
+      const { scored } = await recordExtraction({
         submissionId: sid,
         wave: test ? TEST_WAVE : b.wave,
         certId,
         source: walkup ? "walkup" : "human",
         answers,
-        durationMs: Number(b.durationMs) || null,
+        durationMs,
       });
+
+      // Provenance, captured at read time because it cannot be reconstructed afterwards: which
+      // render they actually looked at and which wording they were given. schemaHint is null on
+      // purpose — that is the model's JSON output format, which no human is ever shown, so the
+      // two arms genuinely differ there and the prompt hash should say so rather than pretend.
+      // Never allowed to break the redirect: that redirect is how the expert gets paid.
+      logRun({
+        source: walkup ? "walkup" : "human",
+        subjectId: sid,
+        certId,
+        instruction: INSTRUCTION,
+        images: await imageManifest(byId(certId)),
+        answers,
+        scored,
+        durationMs,
+      }).catch((e) => console.error("explog write failed:", e.message));
       if (!walkup) {
         await query(
           `update terac_responses set payload = payload || $2::jsonb
