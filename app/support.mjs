@@ -2,6 +2,7 @@ import express from "express";
 import QRCode from "qrcode";
 import { query } from "./db.mjs";
 import { sendMessage, notifySupervisor } from "./linq.mjs";
+import { page } from "./ui.mjs";
 
 /**
  * Worker support over iMessage.
@@ -265,67 +266,75 @@ export function registerSupportRoutes(app) {
   });
 }
 
+const esc = (t) =>
+  String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+
 function supportPage(s) {
-  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support" class="on">Support</a></nav>`;
   const rows = s.messages.length
     ? s.messages
         .map(
           (m) => `<tr>
-    <td style="color:var(--mut);white-space:nowrap">${new Date(m.received_at).toLocaleTimeString()}</td>
-    <td><code>${m.from_number}</code></td>
-    <td>${m.body.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c])}</td>
-    <td>${m.answered ? `<span class="ok">auto · ${m.matched}</span>` : m.escalated ? `<span class="warn">escalated</span>` : "—"}</td>
-    <td>${
+    <td class="t">${new Date(m.received_at).toLocaleTimeString()}</td>
+    <td><code>${esc(m.from_number)}</code></td>
+    <td class="msg">${esc(m.body)}</td>
+    <td>${m.answered ? `<span class="tag ok">auto · ${esc(m.matched)}</span>` : m.escalated ? `<span class="tag warn">escalated</span>` : `<span class="dim">—</span>`}</td>
+    <td class="act">${
       m.resolved
         ? '<span class="ok">replied</span>'
         : m.answered
-          ? "—"
+          ? `<span class="dim">—</span>`
           : `<button class="ghost" onclick="reply(${m.id})">Reply</button>`
     }</td></tr>`,
         )
         .join("")
-    : `<tr><td colspan="5" style="color:var(--mut)">No worker messages yet. Text +1 646 299-5885 to try it.</td></tr>`;
+    : `<tr><td colspan="5" class="mut">No worker messages yet. Text ${supportNumber()} to try it.</td></tr>`;
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Worker Support</title><style>
-:root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--acc:#60a5fa}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:26px 20px 80px}
-nav{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
-nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
-h1{font-size:22px;margin:0 0 2px}.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
-.big{font-size:26px;font-variant-numeric:tabular-nums}
-label{font-size:12px;color:var(--mut);display:block}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500}
-td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}
-.ok{color:var(--ok)}.warn{color:var(--warn)}
-button{background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font:inherit}
-a{color:var(--acc)}code{font-size:12.5px}
-</style></head><body><div class="wrap">${nav}
-<h1>Worker Support</h1>
-<p class="sub">Questions from paid participants, over iMessage on +1 646 299-5885. Written answers go out automatically; anything else waits for you here or on your phone.</p>
-<div class="card grid">
+  const tableSoWhat = s.messages.length
+    ? `<p class="sowhat">The Handling column is the split that matters: <b>every “escalated” row is a question that cost a human their attention</b>, and every “auto” row is one that cost nothing because the answer was already written down. A row still offering Reply is a paid participant sitting idle — at roughly $1.69 a reading, a stalled worker is worth more than the minute it takes to answer. When the same question escalates twice, that is a missing FAQ entry, not a careless worker.</p>`
+    : `<p class="sowhat">Nothing has arrived yet, so <b>this table cannot yet tell you whether the task is clear or merely untried</b> — a well-written task and an unstarted one look identical from here. It becomes evidence about task clarity only once participants are working.</p>`;
+
+  const body = `
+<h1>Worker support</h1>
+<p class="lede">Questions from paid participants, over SMS on ${supportNumber()}.</p>
+<p class="sub">Answers that are already written down go back immediately. Anything else escalates to a human, here and on the supervisor's phone — guessing at an answer about payment or eligibility is how you corrupt the readings you are buying.</p>
+<div class="banner live">Live line. These are real inbound texts, and Reply sends over the same thread.</div>
+
+<h2>Volume</h2>
+<div class="grid">
   <div><label>Messages</label><div class="big">${s.totals.total ?? 0}</div></div>
   <div><label>Auto-answered</label><div class="big ok">${s.totals.auto_answered ?? 0}</div></div>
   <div><label>Escalated to you</label><div class="big warn">${s.totals.escalated ?? 0}</div></div>
 </div>
-<div class="card" style="display:flex;gap:20px;align-items:center;margin-bottom:16px">
-  <img src="/api/support/qr.png" alt="Scan to text worker support" width="150" height="150"
-       style="background:#fff;padding:8px;border-radius:10px;flex:none">
+<p class="sowhat">Only the middle number is free. <b>Escalated is the count of times a person had to stop and answer</b>, and it is the entire human cost of running support for this batch; auto-answered questions were settled from text written once, in advance. Watch the two move against each other — escalations growing while auto-answers stall means the written answers no longer cover what workers are actually asking.</p>
+
+<h2>Reach the line</h2>
+<div class="card qr">
+  <img src="/api/support/qr.png" alt="Scan to text worker support" width="150" height="150">
   <div>
     <strong>Scan to reach support</strong>
-    <p class="sub" style="margin:6px 0 0">Opens a text to <code>${supportNumber()}</code>.
-    Point a participant, a judge, or anyone helping at this and they can ask a question without typing a number.
-    Written answers come back automatically; anything else lands in the table below and on the supervisor's phone.</p>
+    <p class="sub">Opens a text to <code>${supportNumber()}</code>. Point a participant, a reviewer, or anyone helping at this and they can ask without typing a number. Written answers come back automatically; anything else lands in the table below.</p>
   </div>
 </div>
+<p class="sowhat">This is deliberately not the supervisor's mobile. <b>A question that arrives on a personal number is invisible to every count on this page</b> — it skips auto-answer, logging, and the reference code that says who is asking. Route people here if you want support volume to stay measurable.</p>
+
+<h2>Messages</h2>
 <div class="card"><table>
-<tr><th>Time</th><th>From</th><th>Message</th><th>Handling</th><th></th></tr>${rows}
+<thead><tr><th>Time</th><th>From</th><th>Message</th><th>Handling</th><th></th></tr></thead>
+<tbody>${rows}</tbody>
 </table></div>
-<script>
+${tableSoWhat}
+<p class="sub" style="margin-top:14px">Refreshes every 15 seconds.</p>`;
+
+  const extraCss = `
+.qr{display:flex;gap:20px;align-items:center}
+.qr img{background:#fff;padding:8px;border-radius:10px;flex:none}
+.qr .sub{margin:6px 0 0}
+td.t{white-space:nowrap;color:var(--dim);font-variant-numeric:tabular-nums}
+td.msg{max-width:44ch}
+td.act{text-align:right;white-space:nowrap}
+`;
+
+  const script = `
 async function reply(id){
   const text=prompt("Reply to this worker over iMessage:");
   if(!text) return;
@@ -335,6 +344,7 @@ async function reply(id){
   location.reload();
 }
 setInterval(()=>location.reload(),15000);
-</script>
-</div></body></html>`;
+`;
+
+  return page({ title: "Worker Support", current: "/support", body, extraCss, script });
 }

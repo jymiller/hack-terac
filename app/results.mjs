@@ -1,6 +1,7 @@
 import { query } from "./db.mjs";
 import { CERTS, FIELDS } from "./certs.mjs";
 import { wilson } from "./readiness.mjs";
+import { page } from "./ui.mjs";
 
 const FLOOR = 0.9;
 
@@ -113,10 +114,29 @@ function heat(rate) {
   return `background:hsl(${h} 62% 42% / ${0.18 + rate * 0.5});color:var(--fg)`;
 }
 
-export function resultsPage(s) {
-  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results" class="on">Results</a><a href="/support">Support</a></nav>`;
+/** Page-specific only: the accuracy rail, the heat cells and the trap list. */
+const EXTRA_CSS = `
+.badge{display:inline-block;font-size:9.5px;letter-spacing:.07em;font-weight:600;padding:2px 7px;
+  border-radius:99px;border:1px solid currentColor;vertical-align:1px}
+.badge.hum{color:var(--acc)}.badge.mod{color:var(--agent)}
+.rail{height:6px;background:#0a0a0b;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.fill{height:100%;border-radius:99px}
+.fill.hum{background:var(--acc)}.fill.mod{background:var(--agent)}
+.rt{font-size:11.5px;margin-top:4px;font-variant-numeric:tabular-nums}
+.heat{overflow-x:auto}
+.cell{text-align:center;font-variant-numeric:tabular-nums;font-size:12px;padding:8px 6px;
+  border:1px solid var(--line-soft)}
+.fname{font-size:13px;white-space:nowrap;padding-right:14px}
+.hd{font-size:10px;color:var(--dim);writing-mode:vertical-rl;transform:rotate(180deg);
+  padding:6px 2px;white-space:nowrap}
+.trap{border-left:2px solid var(--bad);padding:7px 0 7px 12px;margin-bottom:10px;font-size:13.5px}
+.trap:last-of-type{margin-bottom:0}
+.empty{color:var(--dim);padding:26px;text-align:center}
+`;
 
-  const best = s.entrants[0];
+const VERDICT_TONE = { LICENSED: "ok", "RULED OUT": "bad", "NOT YET": "warn", UNMEASURED: "dim" };
+
+export function resultsPage(s) {
   const topHuman = s.humans[0];
   const topModel = s.models[0];
 
@@ -144,6 +164,7 @@ export function resultsPage(s) {
       <td class="num">${e.med_seconds ? e.med_seconds + "s" : "—"}</td>
       <td class="num">${e.cost_cents ? "$" + (e.cost_cents / 100).toFixed(2) : "≈$0"}</td>
       <td class="num">${e.traps.length ? `<span class="bad">${e.traps.length}</span>` : "—"}</td>
+      <td><span class="tag ${VERDICT_TONE[e.verdict]}">${e.verdict}</span></td>
     </tr>`;
     })
     .join("");
@@ -168,52 +189,55 @@ export function resultsPage(s) {
     .flatMap((e) => e.traps.map((t) => ({ ...t, who: e.who, source: e.source })))
     .slice(0, 12);
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Results — Human vs Agent</title><style>
-:root{color-scheme:light dark;--bg:#0a0a0b;--fg:#f4f4f5;--mut:#a1a1aa;--line:#26262a;--card:#141416;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--hum:#60a5fa;--mod:#c084fc}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1120px;margin:0 auto;padding:26px 20px 90px}
-nav{display:flex;gap:18px;margin:0 0 26px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
-nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
-h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:36px 0 12px}
-.lede{font-size:19px;line-height:1.45;margin:0 0 6px}
-.sub{color:var(--mut);font-size:13.5px;margin:0 0 22px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);padding:8px;border-bottom:1px solid var(--line);font-weight:500}
-td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}tr:last-child td{border-bottom:0}
-.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.badge{font-size:9px;letter-spacing:.08em;padding:2px 6px;border-radius:99px;border:1px solid currentColor;vertical-align:1px}
-.badge.hum{color:var(--hum)}.badge.mod{color:var(--mod)}
-.rail{height:7px;background:#0a0a0b;border:1px solid var(--line);border-radius:99px;overflow:hidden}
-.fill{height:100%;border-radius:99px}.fill.hum{background:var(--hum)}.fill.mod{background:var(--mod)}
-.rt{font-size:11.5px;margin-top:3px;font-variant-numeric:tabular-nums}
-.cell{text-align:center;font-variant-numeric:tabular-nums;font-size:12px;border:1px solid var(--line)}
-.fname{font-size:13px;white-space:nowrap;padding-right:14px}
-.hd{font-size:10px;color:var(--mut);writing-mode:vertical-rl;transform:rotate(180deg);padding:6px 2px;white-space:nowrap}
-.mut{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}.warn{color:var(--warn)}
-.trap{border-left:2px solid var(--bad);padding:8px 0 8px 12px;margin-bottom:10px;font-size:13.5px}
-.empty{color:var(--mut);padding:26px;text-align:center}
-</style></head><body><div class="wrap">${nav}
-<h1>Same documents. Same instruction.</h1>
+  const licensed = s.entrants.filter((e) => e.verdict === "LICENSED").length;
+  const ruledOut = s.entrants.filter((e) => e.verdict === "RULED OUT").length;
+  const undecided = s.entrants.length - licensed - ruledOut;
+  const cpi = "$" + (s.cpi_cents / 100).toFixed(2);
+
+  const body = `
+<h1>Same documents. Nearly the same instruction.</h1>
 <p class="lede">${lede}</p>
-<p class="sub">Every row below read the identical rendered pages and answered the identical eight questions, scored by the identical function against ground truth the documents themselves print. Nothing was extracted in advance for anyone.</p>
+<p class="sub">Every reader below saw the identical rendered pages — each run records the content hash of
+the images it was shown, so "same documents" is checkable on the <a href="/log">run log</a> rather than
+asserted — and answered the identical eight questions, scored by one function against ground truth the
+documents themselves print. One difference is real and worth saying out loud: a model is additionally
+given a JSON reply format that no human is ever shown. Nothing was extracted in advance for anyone.</p>
+
+<h2>Where the evidence stands</h2>
+<div class="grid">
+  <div><label>Licensed</label><div class="big ok">${licensed}</div></div>
+  <div><label>Ruled out</label><div class="big bad">${ruledOut}</div></div>
+  <div><label>Still undecided</label><div class="big warn">${undecided}</div></div>
+  <div><label>Human reading</label><div class="big">${cpi} <small>per certificate</small></div></div>
+</div>
+<p class="sowhat"><b>Only the licensed count is spendable.</b> A reader is licensed when the bottom of its
+95% interval clears the ${pct(s.floor)} floor, which is the bar for letting it read a field unattended;
+ruled out is settled just as firmly and costs far less to reach. Every reader still undecided is an
+unpaid bill — roughly 35 clean readings apiece before an interval is tight enough to decide — and at
+${cpi} a reading, that bill is the number to budget against.</p>
 
 <h2>Leaderboard</h2>
 <div class="card">${
     s.entrants.length
-      ? `<table><tr><th>Reader</th><th class="num">Docs</th><th class="num">Fields</th><th>Accuracy · 95% interval</th><th class="num">Median</th><th class="num">Cost</th><th class="num">Traps</th></tr>${rows}</table>
-    <p class="sub" style="margin:14px 0 0">Cost is what it took to obtain that reader's answers: ${"$" + (s.cpi_cents / 100).toFixed(2)} per certificate for a recruited human, effectively nothing for an API call. The interval is what the evidence licenses, not the observed rate.</p>`
+      ? `<div class="heat"><table><tr><th>Reader</th><th class="num">Docs</th><th class="num">Fields</th><th>Accuracy · 95% interval</th><th class="num">Median</th><th class="num">Cost</th><th class="num">Traps</th><th>Verdict</th></tr>${rows}</table></div>
+    <p class="sowhat"><b>The interval decides, not the rate.</b> A reader sitting above ${pct(s.floor)} on
+    a handful of documents has proved nothing yet; the verdict only moves when the whole interval clears
+    the floor or falls below it. Cost is what those answers took to obtain — ${cpi} per certificate for a
+    recruited human against effectively nothing for an API call — so the asymmetry to trade on is that
+    ruling a reader out is cheap and licensing one is the expensive half.</p>`
       : `<div class="empty">No runs yet.</div>`
   }</div>
 
 <h2>Field by field</h2>
 <div class="card">${
     s.entrants.length
-      ? `<div style="overflow-x:auto"><table>
+      ? `<div class="heat"><table>
     <tr><th></th>${whos.map((w) => `<th class="hd">${short(w)}</th>`).join("")}</tr>${grid}</table></div>
-    <p class="sub" style="margin:14px 0 0">Read it as a shape before you read it as numbers: a column that goes pale is a reader that struggles everywhere, a row that goes pale is a field that is genuinely hard for everyone — and those are different problems with different fixes.</p>`
+    <p class="sowhat"><b>A pale row is a field you keep a human on; a pale column is only a reader you
+    drop.</b> The field is the unit of the decision, so a row that stays pale straight across is work no
+    model on the list can take, no matter which one you buy — while a single pale column is a purchasing
+    mistake and nothing more. Cells show correct over attempted, and anything short of 35 readings is a
+    hint about where to spend next, not a licence.</p>`
       : `<div class="empty">Nothing to compare yet.</div>`
   }</div>
 
@@ -230,10 +254,19 @@ td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}tr
           .join("")
       : `<div class="empty">No reader has taken a distractor yet.</div>`
   }
-  <p class="sub" style="margin:14px 0 0">Each certificate prints its prior-period figure beside the current one. A citation check cannot separate them — the digits really are on the page — so this is the failure automated verification structurally cannot catch.</p>
-</div>
-<script>setInterval(()=>location.reload(),25000)</script>
-</div></body></html>`;
+  <p class="sowhat"><b>Every line here is a wrong answer that a citation check would pass.</b> The
+  distractor is the prior period's figure, printed on the same page as the right one, so asking the
+  reader to quote its source — or asking a second model to verify it — cannot separate them. Where these
+  cluster is where review has to stay human even if the accuracy column looks fine.</p>
+</div>`;
+
+  return page({
+    title: "Results — human and agent on the same documents",
+    current: "/results",
+    body,
+    extraCss: EXTRA_CSS,
+    script: "setInterval(()=>location.reload(),25000)",
+  });
 }
 
 export function registerResultsRoutes(app) {

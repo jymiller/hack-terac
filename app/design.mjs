@@ -3,6 +3,7 @@ import { query } from "./db.mjs";
 import { CERTS, FIELDS, INSTRUCTION, byId } from "./certs.mjs";
 import { SCHEMA_HINT } from "./models.mjs";
 import { wilson, nMin } from "./readiness.mjs";
+import { page } from "./ui.mjs";
 
 /**
  * The experiment design surface.
@@ -122,6 +123,66 @@ function answerRows(cert, agent, human) {
   }).join("");
 }
 
+/* Page-specific layout only. Everything else comes from the shared sheet in app/ui.mjs. */
+const EXTRA_CSS = `
+.split{display:grid;grid-template-columns:1.05fr 1fr;gap:14px;align-items:start;margin-top:14px}
+@media(max-width:980px){.split{grid-template-columns:1fr}.doc{position:static;max-height:none}}
+.doc{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px;
+  position:sticky;top:14px;max-height:88vh;overflow:auto}
+.doc img{width:100%;display:block;border:1px solid var(--line);border-radius:7px;background:#fff}
+.doc img + img{margin-top:10px}
+.pane{background:var(--card);border:1px solid var(--line);border-left-width:2px;
+  border-radius:var(--r);padding:18px;margin-bottom:12px}
+.pane.agent{border-left-color:var(--agent)}
+.pane.human{border-left-color:var(--acc)}
+.shared{background:var(--card);border:1px dashed var(--line);border-radius:var(--r);padding:18px;
+  margin-bottom:12px}
+.who{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;font-weight:600;
+  color:var(--dim);margin-bottom:11px}
+.who.agent{color:var(--agent)}
+.who.human{color:var(--acc)}
+.pane .sub,.shared .sub{font-size:13px;margin:0 0 8px;max-width:none}
+.pane .sub:last-child,.shared .sub:last-child{margin-bottom:0}
+.sub b{color:var(--fg);font-weight:600}
+.pane ol,.card ul,.card ol{margin:9px 0 0;padding-left:20px;font-size:13.5px;color:var(--mut)}
+li{margin:5px 0}
+li strong{color:var(--fg);font-weight:600}
+pre{white-space:pre-wrap;max-height:230px}
+.fname{color:var(--mut);white-space:nowrap}
+.truth{font-weight:600}
+.why{font-size:11.5px;color:var(--dim);margin-top:4px;font-weight:400}
+.row input{width:112px}
+`;
+
+/* The target planner runs client-side; the page ships it, ui.mjs mounts it. */
+const SCRIPT = `
+async function target(){
+  const r=await fetch("/api/design/target",{method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({floor:+floor.value/100,budgetCents:Math.round(+budget.value*100),cpiCents:Math.round(+cpi.value*100)})});
+  const d=await r.json();
+  document.getElementById("tgt").innerHTML=\`
+  <div class="grid" style="margin-top:14px">
+    <div><label>Clean readings to license one field</label><div class="big">\${d.n_min}</div></div>
+    <div><label>Cost to license one certificate</label><div class="big">$\${(d.cost_to_license_one_cert_cents/100).toFixed(2)}</div></div>
+    <div><label>If one reading is wrong</label><div class="big">\${d.need_with_one_miss ?? "—"} <small>readings</small></div></div>
+    <div><label>Participants this budget buys</label><div class="big">\${d.options[0].participants}</div></div>
+  </div>
+  <p class="sowhat">A \${(d.floor*100).toFixed(1)}% floor costs <b>\${d.n_min} consecutive readings with nothing wrong in them</b>,
+  or $\${(d.cost_to_license_one_cert_cents/100).toFixed(2)} of participant spend per certificate. Each participant reads one certificate
+  and answers every field on it once, so a field's evidence is just the participants who drew that certificate — you cannot buy
+  depth and breadth with the same money. Budget for the miss before you commit: one wrong answer in the run takes it to
+  \${d.need_with_one_miss ?? "—"}.</p>
+  <table style="margin-top:16px"><thead><tr><th>Certificates covered</th><th>Participants</th><th class="num">Readings per field</th><th class="num">Cost</th><th>Reaches target?</th></tr></thead>
+  <tbody>\${d.options.map(o=>'<tr><td><strong>'+o.certificates+'</strong></td><td class="num">'+o.participants+'</td><td class="num">'+o.readings_per_field+'</td><td class="num">$'+(o.cost_cents/100).toFixed(2)+'</td><td>'+(o.reaches_target?'<span class="ok">yes</span>':'<span class="bad">no — short by '+o.shortfall+', rule-out only</span>')+'</td></tr>').join("")}</tbody>
+  </table>
+  <p class="sowhat">Every row costs the same money and buys a different answer. <b>A row marked "no" can still rule fields out —
+  it just cannot license any</b>, because one clear failure settles a rule-out while a licence needs the whole clean run.
+  If no row reaches the floor, either narrow the wave to fewer certificates until one does, or decide up front that this
+  spend answers "which fields are not ready" and nothing more.</p>\`;
+}
+target();
+`;
+
 function designPage(s) {
   const { cert, certs, images, agent, human, agentChoices, humanCount } = s;
   const short = (w) => String(w).replace(/^novita\//, "").replace(/^meta-llama\//, "").replace(/^qwen\//, "").replace(/^google\//, "");
@@ -135,48 +196,21 @@ function designPage(s) {
     )
     .join("");
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Experiment Designer</title><style>
-:root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--acc:#60a5fa;--agent:#c084fc}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1240px;margin:0 auto;padding:26px 20px 90px}
-nav{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
-nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
-h1{font-size:22px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:30px 0 10px}
-.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.split{display:grid;grid-template-columns:1.05fr 1fr;gap:16px;align-items:start}
-@media(max-width:980px){.split{grid-template-columns:1fr}}
-.doc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;position:sticky;top:14px;max-height:88vh;overflow:auto}
-.doc img{width:100%;display:block;margin-bottom:10px;border:1px solid var(--line);border-radius:6px;background:#fff}
-.pane{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-.pane.agent{border-color:var(--agent)}.pane.human{border-color:var(--acc)}
-.who{font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
-.who.agent{color:var(--agent)}.who.human{color:var(--acc)}
-.shared{border:1px dashed var(--line);border-radius:12px;padding:16px;margin-bottom:14px;background:var(--card)}
-pre{white-space:pre-wrap;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut);margin:8px 0 0;
-  background:#0c0c0d;border:1px solid var(--line);border-radius:8px;padding:12px;max-height:220px;overflow:auto}
-ol,ul{margin:8px 0 0;padding-left:20px;font-size:13.5px;color:var(--mut)}li{margin:5px 0}
-.row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
-label{font-size:12px;color:var(--mut);display:block;margin-bottom:4px}
-select,input{background:#0c0c0d;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}
-input{width:92px}
-button{background:var(--acc);color:#06121f;border:0;border-radius:8px;padding:9px 15px;cursor:pointer;font:inherit;font-weight:600}
-button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
-table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
-th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500}
-td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}
-.fname{color:var(--mut);white-space:nowrap}.truth{font-weight:600}
-.why{font-size:11.5px;color:var(--mut);margin-top:3px;font-weight:400}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
-.tag{font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
-code{font-size:12.5px}
-a{color:var(--acc)}
-.note{font-size:12.5px;color:var(--mut);margin-top:10px}
-</style></head><body><div class="wrap">
-<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design" class="on">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
+  const body = `
 <h1>Experiment Designer</h1>
-<p class="sub">Both arms of the comparison, on the document itself. If the two readers are not really being asked the same question, the agreement number means nothing — so look before you buy.</p>
+<p class="lede">Both arms of the comparison, on the document itself.</p>
+<p class="sub">If the two readers are not really being asked the same question, the agreement number means nothing — so look before you buy.</p>
+
+<div class="grid">
+  <div><label>${esc(cert.entity)}</label><div class="big">${esc(cert.truth.ratio_name)}</div></div>
+  <div><label>Pages · fields</label><div class="big">${cert.pages} <small>pages</small> · ${FIELDS.length} <small>fields</small></div></div>
+  <div><label>Agent${agent ? ` · ${esc(short(agent.who))}` : ""}</label><div class="big ${agent ? "" : "dim"}">${esc(score(agent))}</div></div>
+  <div><label>Human readings</label><div class="big">${humanCount}</div></div>
+</div>
+<p class="sowhat">Both readers answer the same <b>${FIELDS.length} fields on the same ${cert.pages} pages</b>, graded by the same
+function against what the certificate prints — so the two scores above are directly comparable, and neither is yet evidence.
+A handful of readings settles nothing about whether this work can run unattended; what it buys you is a look at <b>where</b>
+the two disagree, which is what the rest of this page is for.</p>
 
 <h2>1 · What are we comparing?</h2>
 <div class="card">
@@ -193,40 +227,53 @@ a{color:var(--acc)}
     }
     <button class="ghost" type="submit">Show this one</button>
   </form>
-  <p class="note">${cert.pages} rendered pages. Both readers get all of them, in this order, with nothing extracted in advance
-  and no region highlighted. Asking someone to confirm a value we already found measures whether they can read;
-  asking them to find it measures the job.</p>
+  <p class="sowhat">Both readers get all ${cert.pages} pages, in this order, with nothing extracted in advance and no region
+  highlighted — which is what licenses you to read a gap between the arms as <b>a difference in reading, not in what each side
+  was handed</b>. Asking someone to confirm a value we already found measures whether they can read; asking them to find it
+  measures the job we would be automating.</p>
 </div>
 
-<div class="split" style="margin-top:14px">
+<div class="split">
   <div class="doc">${images.map((src) => `<img src="${src}" alt="Certificate page" loading="lazy">`).join("")}</div>
   <div>
     <div class="shared">
       <div class="who">Identical instruction · both readers</div>
       <pre>${esc(INSTRUCTION)}</pre>
-      <p class="note">This is the same string in both arms — <code>INSTRUCTION</code> in
-      <code>app/certs.mjs</code>, rendered into the worker's form and sent as the model's prompt.
-      Neither side is told the ground truth, and neither is told that traps exist.</p>
+      <p class="sowhat">This is one string — <code>INSTRUCTION</code> in <code>app/certs.mjs</code> — rendered into the worker's
+      form and sent as the model's prompt, so <b>editing it moves both arms at once and retires every reading taken before the
+      edit</b>. Neither side is told the ground truth, and neither is told that traps exist.</p>
     </div>
 
     <div class="pane agent">
       <div class="who agent">The agent · ${agent ? esc(short(agent.who)) : "no run on this certificate yet"}</div>
-      <p class="note"><strong>Sees:</strong> the ${cert.pages} pages above as images, at full resolution, in one message.</p>
-      <p class="note"><strong>Told:</strong> the instruction above, plus the reply format:</p>
+      <p class="sub"><b>Sees:</b> the ${cert.pages} pages above as images, at full resolution, in one message.</p>
+      <p class="sub"><b>Told:</b> the instruction above, plus the reply format:</p>
       <pre>${esc(SCHEMA_HINT)}</pre>
-      <p class="note"><strong>Answers:</strong> once, at temperature 0, with no chance to re-read and no way to ask a question.
-      Scored ${score(agent)}${agent?.duration_ms ? ` in ${(agent.duration_ms / 1000).toFixed(1)}s` : ""} · cost ≈ $0.</p>
+      <p class="sub"><b>Answers:</b> once, at temperature 0, with no chance to re-read and no way to ask a question.
+      Scored ${esc(score(agent))}${agent?.duration_ms ? ` in ${(agent.duration_ms / 1000).toFixed(1)}s` : ""} · cost ≈ $0.</p>
+      ${
+        agent
+          ? `<p class="sowhat">The agent scored <b>${esc(score(agent))} at a marginal cost of about nothing</b>, so the fields it
+      already gets right are fields a paid reading has to justify buying. The misses are where the money belongs — and because
+      it answers once, blind, they are the honest floor rather than its best effort.</p>`
+          : `<p class="sowhat">No agent run exists for this certificate, so <b>this pane cannot tell you whether any field here is
+      automatable</b> — only what the agent would be shown if you asked it. Run the cheap arm before pricing the expensive one.</p>`
+      }
     </div>
 
     <div class="pane human">
       <div class="who human">The human · paid participant recruited through Terac</div>
-      <p class="note"><strong>Sees:</strong> the same ${cert.pages} pages, in a scrollable panel they can zoom.</p>
-      <p class="note"><strong>Told:</strong> the same instruction, as a numbered list beside ${FIELDS.length} empty fields:</p>
+      <p class="sub"><b>Sees:</b> the same ${cert.pages} pages, in a scrollable panel they can zoom.</p>
+      <p class="sub"><b>Told:</b> the same instruction, as a numbered list beside ${FIELDS.length} empty fields:</p>
       <ol>${FIELDS.map((f) => `<li>${esc(f.label)} <span class="mut">— ${esc(f.hint)}</span></li>`).join("")}</ol>
-      <p class="note"><strong>Answers:</strong> free text, once, timed from first paint to submit. Can text support mid-task.
+      <p class="sub"><b>Answers:</b> free text, once, timed from first paint to submit. Can text support mid-task.
       ${humanCount} participant${humanCount === 1 ? " has" : "s have"} read this certificate${
-        human ? `; the most recent scored ${score(human)}${human.duration_ms ? ` in ${Math.round(human.duration_ms / 1000)}s` : ""}` : ""
+        human ? `; the most recent scored ${esc(score(human))}${human.duration_ms ? ` in ${Math.round(human.duration_ms / 1000)}s` : ""}` : ""
       } · $${(HUMAN_CPI_CENTS / 100).toFixed(2)} each.</p>
+      <p class="sowhat"><b>${humanCount} reading${humanCount === 1 ? "" : "s"} is not a referee for this certificate.</b>
+      Readiness is a Wilson 95% lower bound against a 0.90 floor, and that bound is flat on its back until a long clean run
+      arrives — section 2 prices exactly how long. What this pane can settle is whether the human was asked a fair question;
+      what it cannot settle is whether any field is ready.</p>
     </div>
 
     <div class="card">
@@ -238,26 +285,37 @@ a{color:var(--acc)}
         <li>Neither is graded against the other — both are graded against what the certificate prints, which is why the documents have to be synthetic.</li>
         <li class="warn">One human is not a referee for this certificate. They are one reading, and a field needs many before anything can be licensed. That is section 2.</li>
       </ul>
+      <p class="sowhat">Every asymmetry left in the design runs the same way — <b>toward the human</b> — so the agent's score is a
+      lower bound on automation, not a flattering one. That is the direction you want the bias pointing: a field the agent reads
+      correctly under these conditions is a field you can argue about buying, and a field it misses stays bought.</p>
     </div>
   </div>
 </div>
 
 <h2>Field by field · what each reader reported</h2>
 <div class="card"><table>
-<tr><th>Field</th><th>The document prints</th><th>Agent${agent ? ` · ${esc(short(agent.who))}` : ""}</th><th>Human${
+<thead><tr><th>Field</th><th>The document prints</th><th>Agent${agent ? ` · ${esc(short(agent.who))}` : ""}</th><th>Human${
     human ? ` · most recent` : ""
-  }</th></tr>
-${answerRows(cert, agent, human)}
+  }</th></tr></thead>
+<tbody>${answerRows(cert, agent, human)}</tbody>
 </table>
-<p class="note">Green is exact after normalising case, whitespace, currency and separators. Red carries the reason
-when the answer is a value the page itself invites.</p>
+<p class="sowhat">Read the red cells, not the totals. Green is exact after normalising case, whitespace, currency and separators,
+so <b>a red cell is a real disagreement about what the page says</b> — and where it carries a reason, the reader landed on a
+number the document itself printed. Those are the fields that decide whether this certificate can ever be read unattended;
+totals this small cannot.</p>
 </div>
 
 <h2>What this document invites you to get wrong</h2>
 <div class="card">
-  ${traps ? `<ul>${traps}</ul>` : `<p class="note">No distractors recorded for this certificate.</p>`}
-  <p class="note">Every one of these is a real number printed on the same page. A citation check cannot separate them
-  from the right answer, which is the whole reason to buy a human reading rather than a second automated pass.</p>
+  ${
+    traps
+      ? `<ul>${traps}</ul>
+  <p class="sowhat">Every value listed here is <b>a real number printed on the same page</b>, so a citation check will confirm it
+  and still be wrong. That is the case for buying a human reading rather than a second automated pass — and the reason a field
+  carrying a trap has to earn its clean run before it is licensed, not after.</p>`
+      : `<p class="sowhat">No distractors are recorded for this certificate, so <b>a clean score here is not evidence of trap
+  resistance</b> — it is evidence of reading a document that does not fight back. Do not generalise it to the certificates that do.</p>`
+  }
 </div>
 
 <h2>2 · What do you want to get to?</h2>
@@ -270,26 +328,7 @@ when the answer is a value the page itself invites.</p>
     <button class="ghost" onclick="target()">Show me what reaches it</button>
   </div>
   <div id="tgt"></div>
-</div>
+</div>`;
 
-<script>
-async function target(){
-  const r=await fetch("/api/design/target",{method:"POST",headers:{"content-type":"application/json"},
-    body:JSON.stringify({floor:+floor.value/100,budgetCents:Math.round(+budget.value*100),cpiCents:Math.round(+cpi.value*100)})});
-  const d=await r.json();
-  document.getElementById("tgt").innerHTML=\`
-  <p class="note">Each participant reads one certificate and answers every field on it once, so a field's evidence
-  is just the number of participants who drew that certificate. To license a field at
-  <strong>\${(d.floor*100).toFixed(1)}%</strong> you need <strong>\${d.n_min}</strong> readings with no mistakes —
-  <strong>$\${(d.cost_to_license_one_cert_cents/100).toFixed(2)}</strong> per certificate. One wrong answer among them and it becomes
-  <strong>\${d.need_with_one_miss ?? "—"}</strong> readings.</p>
-  <table><tr><th>Certificates covered</th><th>Participants</th><th>Readings per field</th><th>Cost</th><th>Reaches target?</th></tr>
-  \${d.options.map(o=>'<tr><td><strong>'+o.certificates+'</strong></td><td>'+o.participants+'</td><td>'+o.readings_per_field+'</td><td>$'+(o.cost_cents/100).toFixed(2)+'</td><td>'+(o.reaches_target?'<span class="ok">yes</span>':'<span class="bad">no — short by '+o.shortfall+', rule-out only</span>')+'</td></tr>').join("")}
-  </table>
-  <p class="note">This is the honest shape of the thing: ruling a field out is cheap, because one clear failure does it.
-  Licensing one is expensive, because it takes a run of readings with nothing wrong in it.</p>\`;
-}
-target();
-</script>
-</div></body></html>`;
+  return page({ title: "Experiment Designer", current: "/design", body, extraCss: EXTRA_CSS, script: SCRIPT });
 }

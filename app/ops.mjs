@@ -14,6 +14,7 @@ import {
   stopOpportunity,
 } from "./terac.mjs";
 import { thetaLicensed, label as readinessLabel, wilson, nMin } from "./readiness.mjs";
+import { page } from "./ui.mjs";
 
 const FLOOR = 0.9;
 
@@ -328,68 +329,70 @@ export function registerOpsRoutes(app) {
 function opsPage(s) {
   const live = s.opportunities.find((o) => o.status === "active");
   const draft = s.opportunities.find((o) => o.status === "draft");
-  const pct = (x) => (x == null ? "—" : (x * 100).toFixed(1) + "%");
+  const need = nMin(s.floor);
+  const floorPct = (s.floor * 100).toFixed(0);
+  // Tag colour is presentation only: .tag borders in currentColor, so the utility class
+  // colours the ring and the text together.
+  const tone = (l) =>
+    l === "LICENSED" ? "ok" : l === "RULED OUT" ? "bad" : l === "UNMEASURED" ? "dim" : "warn";
+  const statusTone = (st) => (st === "active" ? "ok" : st === "draft" ? "warn" : "dim");
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Coverage Engine — Operator</title><style>
-:root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--acc:#60a5fa}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
-nav{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
-nav a{color:var(--mut);text-decoration:none}nav a.on{color:var(--fg)}
-h1{font-size:22px;margin:0 0 2px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:32px 0 10px}
-.sub{color:var(--mut);margin:0 0 20px;font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;font-weight:500;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}
-td{padding:8px;border-bottom:1px solid var(--line)}tr:last-child td{border-bottom:0}
-.tag{display:inline-block;font-size:10px;letter-spacing:.06em;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}
-.tag.live{color:var(--ok);border-color:var(--ok)}.tag.syn{color:var(--warn);border-color:var(--warn)}
-button{background:var(--acc);color:#06121f;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
-button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
-button.danger{background:var(--bad);color:#1b0505}
-button:disabled{opacity:.35;cursor:not-allowed}
-input{background:#0c0c0d;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:90px}
-label{font-size:12px;color:var(--mut);display:block;margin-bottom:4px}
-.row{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
-.big{font-size:26px;font-variant-numeric:tabular-nums}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-pre{background:#0c0c0d;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:12px;margin:10px 0 0}
-a{color:var(--acc)}
-.warn{color:var(--warn)}.ok{color:var(--ok)}.bad{color:var(--bad)}
-</style></head><body><div class="wrap">
-<nav><a href="/">Coverage board</a><a href="/ops" class="on">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>
-<h1>Coverage Engine — Operator</h1>
-<p class="sub">Dispatch calibration waves. Readiness is the Wilson 95% lower bound over independent field judgements, against a ${(s.floor * 100).toFixed(0)}% floor.</p>
+  const extraCss = `
+.row input{width:120px}
+.callout{margin:18px 0 0}
+.callout .line{color:var(--fg);font-size:14px;margin-top:6px}
+.callout .meta{color:var(--mut);font-size:12px;margin-top:5px;word-break:break-all}
+.callout h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:600;margin:0}
+.tbl{overflow-x:auto}
+`;
 
-<div class="card"><div class="grid">
-  <div><label>Completed tasks</label><div class="big">${s.completed_tasks}</div></div>
+  const body = `
+<h1>Operator</h1>
+<p class="lede">Plan a calibration wave against a budget, price it with a human, and dispatch it.</p>
+<p class="sub">Readiness is the Wilson 95% lower bound over independent field judgements, against a
+${floorPct}% floor. Everything on this page is free except <b>Launch</b>.</p>
+
+<h2>Evidence on hand</h2>
+<div class="grid">
   <div><label>Fields judged</label><div class="big">${s.total_attestations}</div></div>
+  <div><label>Completed tasks</label><div class="big">${s.completed_tasks}</div></div>
   <div><label>Tasks opened</label><div class="big">${s.opened_tasks}</div></div>
   <div><label>Certificates</label><div class="big">${s.corpus.length}</div></div>
-</div></div>
+</div>
+<p class="sowhat">Judgments, not participants, are what buy readiness: <b>a field needs ${need}
+independent clean readings before even perfect agreement can license it</b>. Read Fields judged
+against that bar to see how many fields this console could decide today, and read Tasks opened
+against Completed — that gap is recruitment already paid for that returned no evidence.</p>
 
 <h2>Certificates</h2>
-<div class="card"><table>
-<tr><th>Certificate</th><th>Primary ratio</th><th>Fields</th><th>Extractions</th><th>Fields correct</th><th>Readiness</th><th>Evidence</th></tr>
+<div class="card"><div class="tbl"><table>
+<thead><tr><th>Certificate</th><th>Primary ratio</th><th class="num">Fields</th>
+<th class="num">Extractions</th><th class="num">Fields correct</th><th>Readiness</th><th>Evidence</th></tr></thead>
+<tbody>
 ${s.corpus
   .map(
     (c) => `<tr>
-  <td>${c.name}</td><td style="color:var(--mut)">${c.expertise_area}</td>
-  <td>${c.claims}</td><td>${c.rated_claims}</td><td>${c.agreed}</td>
-  <td><strong>${c.theta.toFixed(3)}</strong> <span class="tag">${c.label}</span></td>
-  <td><span class="tag ${c.evidence_mode === "live" ? "live" : "syn"}">${c.evidence_mode.toUpperCase()}</span></td>
+  <td>${c.name}</td><td class="mut">${c.expertise_area}</td>
+  <td class="num">${c.claims}</td><td class="num">${c.rated_claims}</td><td class="num">${c.agreed}</td>
+  <td><b>${c.theta.toFixed(3)}</b> <span class="tag ${tone(c.label)}">${c.label}</span></td>
+  <td><span class="tag ${c.evidence_mode === "live" ? "ok" : "warn"}">${c.evidence_mode.toUpperCase()}</span></td>
 </tr>`,
   )
   .join("")}
-</table>
-<p class="sub" style="margin:12px 0 0">A certificate nobody has extracted reports 0.000 by construction — it cannot inherit readiness it has not been measured for.</p>
+</tbody>
+</table></div>
+<p class="sowhat">Readiness is a lower bound, so <b>0.000 means unmeasured, not unreliable</b> — a
+certificate nobody has extracted cannot inherit readiness it was never tested for. Only two labels
+change what you do: LICENSED means stop paying a human to read that certificate's fields, RULED OUT
+means stop trying. Everything between them is <b>evidence you have not bought yet</b>, and ruling a
+field out costs a fraction of what licensing one costs.</p>
 </div>
 
-<h2>Plan — what a wave can actually buy</h2>
+<h2>Plan the wave</h2>
 <div class="card">
-  <p class="sub" style="margin:0 0 14px">
-    The participant is the expensive unit, not their time. CPI floors near <strong>$9–12</strong> and is
-    almost flat in duration above ten minutes, so <strong>claims per task</strong> — not participant count —
+  <p class="sub" style="margin-bottom:14px">
+    The participant is the expensive unit, not their time. CPI floors near <b>$9–12</b> and is
+    almost flat in duration above ten minutes, so <b>claims per task</b> — not participant count —
     is the lever on cost per judgment. Nothing here contacts Terac or spends anything.
   </p>
   <div class="row">
@@ -398,24 +401,27 @@ ${s.corpus
     <div><label>Claims / task</label><input id="p_claims" type="number" value="20" min="1" max="60"></div>
     <button class="ghost" onclick="plan()">Model it</button>
   </div>
-  <div id="planout" style="margin-top:14px"></div>
+  <div id="planout" style="margin-top:16px"></div>
 </div>
 
-<h2>Price — ask a human instead of taking the estimate</h2>
+<h2>Price it with a human</h2>
 <div class="card">
-  <p class="sub" style="margin:0 0 12px">
-    Draft pricing is an autonomous machine estimate. A feasibility request puts a human at Terac on it,
-    and a confirmed CPI can be bound to a draft — which is the only way to argue this task is simpler,
-    and cheaper, than it looks. Costs nothing.
+  <p class="sub" style="margin-bottom:12px">
+    A feasibility request puts a human at Terac on the price, and a confirmed CPI can be bound to a
+    draft — the only way to argue this task is simpler, and cheaper, than it looks. Costs nothing.
   </p>
   <div class="row">
     <div><label>Participants to price</label><input id="f_count" type="number" value="10" min="1"></div>
     <button class="ghost" onclick="feas()">Request human pricing</button>
   </div>
   <pre id="feasout" style="display:none"></pre>
+  <p class="sowhat"><b>A draft price is an autonomous estimate, not what Terac charges</b> — the last
+  wave was drafted at one price and settled far below it. So a wave sized against the estimate can be
+  wrong about what the budget buys before a single reader is recruited. If a confirmed price comes
+  back different, re-run the plan above before drafting: it changes which verdict row you can afford.</p>
 </div>
 
-<h2>Dispatch a calibration wave</h2>
+<h2>Dispatch</h2>
 <div class="card">
   <div class="row">
     <div><label>Participants</label><input id="participants" type="number" value="6" min="1" max="1000"></div>
@@ -427,44 +433,63 @@ ${s.corpus
   <pre id="draftout" style="display:none"></pre>
   ${
     draft
-      ? `<div style="margin-top:14px;padding:14px;border:1px solid var(--warn);border-radius:10px">
-      <div class="warn" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">Draft ready — launching spends real money</div>
-      <div><strong>${draft.participants}</strong> participants · <strong>${money(draft.cost_cents) ?? "price on draft"}</strong> · wave <code>${draft.wave}</code></div>
-      <div style="font-size:12px;color:var(--mut);margin-top:4px">task_url: ${draft.task_url}</div>
-      ${draft.dashboard_url ? `<div style="margin-top:6px"><a href="${draft.dashboard_url}" target="_blank">Review draft in Terac dashboard →</a></div>` : ""}
+      ? `<div class="banner syn callout">
+      <h3>Draft ready — launching spends real money</h3>
+      <div class="line"><b>${draft.participants}</b> participants · <b>${money(draft.cost_cents) ?? "price on draft"}</b> · wave <code>${draft.wave}</code></div>
+      <div class="meta">task_url: ${draft.task_url}</div>
+      ${draft.dashboard_url ? `<div class="meta"><a href="${draft.dashboard_url}" target="_blank">Review draft in Terac dashboard →</a></div>` : ""}
       <div style="margin-top:12px"><button onclick="launchIt('${draft.id}')">Launch — begin recruiting</button></div>
-    </div>`
-      : `<p class="sub" style="margin:12px 0 0">No draft yet. A draft costs nothing and starts no recruitment.</p>`
+    </div>
+    <p class="sowhat">This is the last free step. <b>Launch is the only control on this page that
+    spends money</b>, and stopping later does not refund readings already claimed. The figure above is
+    the draft estimate rather than the charge — the settled number is only read back after launch — so
+    decide on the shape of the wave, not on that price.</p>`
+      : `<p class="sowhat">No draft yet. A draft costs nothing and starts no recruitment, so
+    <b>there is no reason to plan a wave you have not drafted</b> — the draft is where Terac first
+    tells you a price to argue with.</p>`
   }
   ${
     live
-      ? `<div style="margin-top:14px;padding:14px;border:1px solid var(--ok);border-radius:10px">
-      <div class="ok" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase">Live · recruiting</div>
-      <div style="margin-top:4px"><code>${live.id}</code> · ${live.participants} participants · ${money(live.cost_cents) ?? ""}</div>
-      <div style="margin-top:10px"><button class="danger" onclick="stopIt('${live.id}')">Stop recruiting</button></div>
-    </div>`
+      ? `<div class="banner live callout">
+      <h3>Live · recruiting</h3>
+      <div class="line"><code>${live.id}</code> · ${live.participants} participants · ${money(live.cost_cents) ?? ""}</div>
+      <div style="margin-top:12px"><button class="danger" onclick="stopIt('${live.id}')">Stop recruiting</button></div>
+    </div>
+    <p class="sowhat"><b>The cost is already committed; what is still open is whether the readings
+    arrive.</b> Stop when Fields judged at the top of this page has moved far enough to decide a
+    field — not when the wave merely looks slow. Stopping early keeps the money already spent and
+    forfeits the evidence it was meant to buy.</p>`
       : ""
   }
 </div>
 
-<h2>Waves</h2>
-<div class="card"><table>
-<tr><th>ID</th><th>Wave</th><th>Status</th><th>Participants</th><th>Cost</th><th>Created</th></tr>
+<h2>Wave ledger</h2>
+<div class="card"><div class="tbl"><table>
+<thead><tr><th>ID</th><th>Wave</th><th>Status</th><th class="num">Participants</th>
+<th class="num">Cost</th><th class="num">Created</th></tr></thead>
+<tbody>
 ${
   s.opportunities.length
     ? s.opportunities
         .map(
           (o) => `<tr><td><code>${o.id.slice(0, 12)}…</code></td><td>${o.wave}</td>
-    <td><span class="tag ${o.status === "active" ? "live" : ""}">${o.status}</span></td>
-    <td>${o.participants ?? "—"}</td><td>${money(o.cost_cents) ?? "—"}</td>
-    <td style="color:var(--mut)">${new Date(o.created_at).toLocaleTimeString()}</td></tr>`,
+    <td><span class="tag ${statusTone(o.status)}">${o.status}</span></td>
+    <td class="num">${o.participants ?? "—"}</td><td class="num">${money(o.cost_cents) ?? "—"}</td>
+    <td class="num mut">${new Date(o.created_at).toLocaleTimeString()}</td></tr>`,
         )
         .join("")
-    : `<tr><td colspan="6" style="color:var(--mut)">none yet</td></tr>`
+    : `<tr><td colspan="6" class="dim">none yet</td></tr>`
 }
+</tbody>
 </table></div>
+<p class="sowhat">This is the spend ledger, not the evidence: <b>a wave's cost is committed the
+moment its status reads active</b>, and nothing in these columns says whether the readings arrived.
+Read cost here against Fields judged at the top — a wave that cost money without moving that counter
+is the one to stop, and the reason to buy more claims per task next time rather than more people.</p>
+</div>
+`;
 
-<script>
+  const script = `
 const out=(id,v)=>{const e=document.getElementById(id);e.style.display="block";e.textContent=typeof v==="string"?v:JSON.stringify(v,null,2)};
 async function post(u,b){const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});return[r.ok,await r.json()]}
 async function draftIt(){
@@ -480,16 +505,21 @@ const fmt=c=>"$"+(c/100).toFixed(2);
 async function plan(){
   const[,j]=await post("/api/ops/plan",{budgetCents:Math.round(+p_budget.value*100),cpiCents:Math.round(+p_cpi.value*100),claimsPerTask:+p_claims.value});
   const rows=j.sweep.map(o=>{
-    const verdict=o.can_license?'<span class="ok">can license</span>':(o.can_rule_out?'<span class="warn">rule-out only</span>':'<span class="bad">concludes nothing</span>');
-    return \`<tr><td><strong>\${o.claims_per_task}</strong></td><td>\${o.participants}</td><td>\${o.judgments}</td>
-      <td>\${o.claims_per_process}</td><td>\${fmt(o.cost_cents)}</td>
-      <td>\${(o.cost_per_judgment_cents/100).toFixed(3)}</td><td>\${verdict}</td></tr>\`;
+    const verdict=o.can_license?'<span class="tag ok">can license</span>':(o.can_rule_out?'<span class="tag warn">rule-out only</span>':'<span class="tag bad">concludes nothing</span>');
+    return \`<tr><td class="num"><b>\${o.claims_per_task}</b></td><td class="num">\${o.participants}</td><td class="num">\${o.judgments}</td>
+      <td class="num">\${o.claims_per_process}</td><td class="num">\${fmt(o.cost_cents)}</td>
+      <td class="num">\${(o.cost_per_judgment_cents/100).toFixed(3)}</td><td>\${verdict}</td></tr>\`;
   }).join("");
+  const people=j.sweep.length?j.sweep[0].participants:0;
   document.getElementById("planout").innerHTML=
-    \`<table><tr><th>Claims/task</th><th>People</th><th>Judgments</th><th>Claims/process</th><th>Cost</th><th>$/judgment</th><th>Verdict</th></tr>\${rows}</table>
-     <p class="sub" style="margin:12px 0 0">A process needs <strong>\${j.n_min_to_license} independent claims</strong> before even perfect agreement
-     can push the Wilson lower bound to the \${(100*${FLOOR}).toFixed(0)}% floor. Below that, a wave can rule a process out but can never license one —
-     so buying fewer, longer tasks is what makes licensing reachable at all.</p>\`;
+    \`<div class="tbl"><table><thead><tr><th class="num">Claims/task</th><th class="num">People</th><th class="num">Judgments</th><th class="num">Claims/process</th><th class="num">Cost</th><th class="num">$/judgment</th><th>Verdict</th></tr></thead><tbody>\${rows}</tbody></table></div>
+     <p class="sowhat"><b>Read the Verdict column first — every row here costs the same, so a row that
+     concludes nothing is the whole budget spent on an answer you cannot use.</b> The budget buys the
+     same \${people} people whichever row you pick, which makes claims per task the only lever that
+     changes what the wave can conclude: a process needs \${j.n_min_to_license} independent claims
+     before even perfect agreement lifts the Wilson lower bound to the \${(100*${FLOOR}).toFixed(0)}% floor.
+     <b>Take the topmost row that says "can license"</b>; if none does, this budget can only rule
+     processes out, and the fix is fewer, longer tasks rather than more people.</p>\`;
 }
 plan();
 async function launchIt(id){
@@ -505,6 +535,13 @@ setInterval(async()=>{
   const s=await (await fetch("/api/ops/state")).json();
   if(s.total_attestations!==${s.total_attestations}) location.reload();
 },7000);
-</script>
-</div></body></html>`;
+`;
+
+  return page({
+    title: "Coverage Engine — Operator",
+    current: "/ops",
+    body,
+    extraCss,
+    script,
+  });
 }

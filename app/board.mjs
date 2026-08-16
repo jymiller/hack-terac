@@ -1,6 +1,7 @@
 import { query } from "./db.mjs";
 import { CERTS, FIELDS } from "./certs.mjs";
 import { wilson, nMin } from "./readiness.mjs";
+import { page } from "./ui.mjs";
 
 const FLOOR = 0.9;
 
@@ -101,11 +102,14 @@ export async function boardState() {
 const pct = (x) => (x == null ? "—" : (x * 100).toFixed(1) + "%");
 
 export function boardPage(s) {
-  const nav = `<nav><a href="/">Coverage board</a><a href="/ops">Operator</a><a href="/design">Designer</a><a href="/funnel">Funnel</a><a href="/results">Results</a><a href="/support">Support</a></nav>`;
+  const count = (v) => s.fields.filter((f) => f.verdict === v).length;
+  const licensed = count("LICENSED");
+  const ruledOut = count("RULED OUT");
+  const open = s.fields.length - licensed - ruledOut;
 
   const headline = s.human_n
-    ? `${s.human_n} paid human extraction${s.human_n === 1 ? "" : "s"} against ${s.model_n} model run${s.model_n === 1 ? "" : "s"} on the same certificates.`
-    : `No human extractions yet. Every figure below is a fixture, and says so.`;
+    ? `${licensed} of ${s.fields.length} fields are licensed to run with no human in the loop, ${ruledOut} are ruled out, and ${open} still ${open === 1 ? "lacks" : "lack"} the evidence to decide either way.`
+    : `Nothing is licensed yet: no paid human reading has arrived, so all ${s.fields.length} fields sit unmeasured and every figure below is a fixture.`;
 
   const fieldRows = s.fields
     .map((f) => {
@@ -133,34 +137,28 @@ export function boardPage(s) {
         .join("")
     : `<tr><td colspan="4" class="mut">No wrong answers recorded yet.</td></tr>`;
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Coverage Engine</title><style>
-:root{color-scheme:light dark;--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--acc:#60a5fa}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:26px 20px 90px}
-nav{display:flex;gap:18px;margin:0 0 24px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:13px}
-nav a{color:var(--mut);text-decoration:none}nav a:first-child{color:var(--fg)}
-h1{font-size:27px;margin:0 0 6px;letter-spacing:-.01em}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:34px 0 10px}
-.lede{font-size:17px;color:var(--fg);margin:0 0 4px}
-.sub{color:var(--mut);font-size:13.5px;margin:0 0 20px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
-.big{font-size:27px;font-variant-numeric:tabular-nums}
-label{font-size:11px;color:var(--mut);display:block;text-transform:uppercase;letter-spacing:.06em}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:7px 8px;border-bottom:1px solid var(--line);font-weight:500}
-td{padding:9px 8px;border-bottom:1px solid var(--line)}tr:last-child td{border-bottom:0}
-.num{font-variant-numeric:tabular-nums;text-align:right}
-.tag{font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
-.chip{font-size:11px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;color:var(--mut);white-space:nowrap}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
-.banner{border-radius:10px;padding:12px 14px;font-size:13.5px;margin:0 0 20px;border:1px solid}
-.live{border-color:var(--ok);color:var(--ok)}.syn{border-color:var(--warn);color:var(--warn)}
-</style></head><body><div class="wrap">${nav}
+  const trapSoWhat = s.distractors.length
+    ? `<b>These are the errors a checker cannot catch.</b> Every wrong value here is a real figure printed on the same
+       page — usually the prior period's — so a citation check passes on it and only a second reading finds it. Where the
+       Models column runs ahead of the Humans column, that field stays manual whatever its headline rate says.`
+    : `<b>An empty trap table is not a clean bill of health.</b> With no wrong answers recorded it cannot tell you whether
+       the prior-period figures printed alongside the current ones are being taken by mistake — only that nobody has
+       taken one yet. This table earns its keep on the first wrong reading, not before.`;
+
+  const gridSoWhat = s.human_n
+    ? `<b>These counts are sample size, not score.</b> No field can be licensed on fewer than ${s.n_min} clean human
+       readings, so at roughly $1.69 a reading the gap between ${s.human_n} and that threshold is the price of deciding
+       the fields still open. Median time is how long one paid reading takes; the model runs are the same work with that
+       time and that fee removed.`
+    : `<b>Nothing here is a measurement yet.</b> With no paid human readings on the board these tiles show only what the
+       fixtures contain, and the first real wave is what turns them into evidence — ${s.n_min} clean readings per field
+       before any of them can license anything.`;
+
+  const body = `
 <h1>Cost of Trust — Coverage Engine</h1>
 <p class="lede">${headline}</p>
-<p class="sub">Which steps of a compliance-certificate review can run with no human in the loop, and what the evidence actually licenses us to claim.</p>
+<p class="sub">Which steps of a compliance-certificate review can run with no human in the loop, and what the evidence
+actually licenses us to claim.</p>
 
 <div class="banner ${s.evidence_mode === "live" ? "live" : "syn"}">
   ${
@@ -170,41 +168,51 @@ td{padding:9px 8px;border-bottom:1px solid var(--line)}tr:last-child td{border-b
   }
 </div>
 
-<div class="card grid">
+<div class="grid">
   <div><label>Human extractions</label><div class="big">${s.human_n}</div></div>
   <div><label>Model runs</label><div class="big">${s.model_n}</div></div>
   <div><label>Median human time</label><div class="big">${s.median_seconds ? s.median_seconds + "s" : "—"}</div></div>
-  <div><label>Support auto-answered</label><div class="big">${s.support.auto ?? 0}<span style="font-size:14px;color:var(--mut)">/${s.support.total ?? 0}</span></div></div>
+  <div><label>Support auto-answered</label><div class="big">${s.support.auto ?? 0}<small>/${s.support.total ?? 0}</small></div></div>
 </div>
+<p class="sowhat">${gridSoWhat}</p>
 
 <h2>Per-field readiness · floor ${(s.floor * 100).toFixed(0)}%</h2>
 <div class="card"><table>
-<tr><th>Field extracted</th><th class="num">Correct</th><th class="num">Rate</th><th class="num">95% interval</th><th>Verdict</th><th>Models</th></tr>
-${fieldRows}
-</table>
-<p class="sub" style="margin:12px 0 0">Readiness is the Wilson lower bound over independent extractions, never the observed rate.
-A field needs <strong>${s.n_min}</strong> perfectly-correct answers before even flawless agreement can reach the floor —
-below that a wave can rule a field out but can never license one.</p>
-</div>
+<thead><tr><th>Field extracted</th><th class="num">Correct</th><th class="num">Rate</th><th class="num">95% interval</th><th>Verdict</th><th>Models</th></tr></thead>
+<tbody>${fieldRows}</tbody>
+</table></div>
+<p class="sowhat"><b>The verdict column is the buy decision, and the interval is what earns it.</b> A field is licensed only
+when the Wilson lower bound clears ${(s.floor * 100).toFixed(0)}% — which takes at least ${s.n_min} perfectly correct
+readings, so below that a wave can rule a field out cheaply but can never turn one on. Read the interval, not the rate:
+LICENSED fields come off the human queue, RULED OUT fields stay on it, and ${
+    open
+      ? `the ${open} still open ${open === 1 ? "is" : "are"} where the next wave's budget belongs`
+      : `with none left undecided another wave buys no new licences`
+  }.</p>
 
 <h2>The traps · which specific wrong value was taken</h2>
 <div class="card"><table>
-<tr><th>Field</th><th class="num">Humans</th><th class="num">Models</th><th>Why it is the plausible wrong answer</th></tr>
-${trapRows}
-</table>
-<p class="sub" style="margin:12px 0 0">Each certificate prints its prior-period ratio beside the current one. A citation check
-cannot separate them — the digits are genuinely on the page — so this is the failure that
-automated verification structurally cannot catch, and the reason to buy human judgment at all.</p>
-</div>
+<thead><tr><th>Field</th><th class="num">Humans</th><th class="num">Models</th><th>Why it is the plausible wrong answer</th></tr></thead>
+<tbody>${trapRows}</tbody>
+</table></div>
+<p class="sowhat">${trapSoWhat}</p>
 
 <h2>Documents</h2>
+<p class="sub">Synthetic demonstration certificates. No real company, person, or account appears in any of them.</p>
 <div class="card"><table>
-<tr><th>Certificate</th><th>Entity</th><th>Primary ratio</th><th class="num">Extractions</th></tr>
-${s.certs.map((c) => `<tr><td><a href="/docs/${c.id === "abpa" ? "abpa-demo-compliance-certificate-2026-06-30" : c.id === "hs1" ? "hs1-demo-compliance-certificate-2026-03-31" : "lgw-demo-compliance-certificate-2026-03-31"}.pdf" style="color:var(--acc)">${c.id.toUpperCase()}</a></td><td>${c.entity}</td><td>${c.ratio}</td><td class="num">${c.answered}</td></tr>`).join("")}
-</table>
-<p class="sub" style="margin:12px 0 0">Synthetic demonstration documents. No real company, person, or account appears in any of them.</p>
-</div>
+<thead><tr><th>Certificate</th><th>Entity</th><th>Primary ratio</th><th class="num">Extractions</th></tr></thead>
+<tbody>${s.certs.map((c) => `<tr><td><a href="/docs/${c.id === "abpa" ? "abpa-demo-compliance-certificate-2026-06-30" : c.id === "hs1" ? "hs1-demo-compliance-certificate-2026-03-31" : "lgw-demo-compliance-certificate-2026-03-31"}.pdf">${c.id.toUpperCase()}</a></td><td>${c.entity}</td><td>${c.ratio}</td><td class="num">${c.answered}</td></tr>`).join("")}</tbody>
+</table></div>
+<p class="sowhat"><b>Extractions per certificate is the reach of the claim, not a corpus size.</b> Every verdict above rests on
+these ${s.certs.length} synthetic documents and one instruction, so a licence here is a licence for this layout — a certificate that
+prints its schedules differently starts the count again at zero. A row still on nought is a document the board says
+nothing about.</p>`;
 
-<script>setInterval(()=>location.reload(),20000)</script>
-</div></body></html>`;
+  return page({
+    title: "Coverage Engine",
+    current: "/",
+    body,
+    extraCss: `.tag{white-space:nowrap}td .chip{margin:0 4px 3px 0}`,
+    script: `setInterval(()=>location.reload(),20000)`,
+  });
 }
