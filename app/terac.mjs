@@ -65,10 +65,11 @@ export function opportunityBody({
       {
         sequence: 1,
         task_type: "activity",
-        // Pays automatically on completion, which requires a task_url whose page redirects to
-        // Terac's callback. Ours does. Owner's call: a speed-run therefore cannot be refused
-        // payment, so the screener and duration_ms are the only defences left, not review.
-        review_type: "auto_approve",
+        // Submissions land in AWAITING_REVIEW and pay only when we approve. The charge still
+        // happens at LAUNCH — this governs payout, not spend — so it buys the ability to
+        // withhold payment from a speed-run, not a refund on one. Owner's decision, twice:
+        // it was reverted to auto_approve once by a merge from a branch predating the call.
+        review_type: "manual_review",
         title: `Certificate reading — 8 values to find and report`,
         description:
           "Open the certificate, find the eight values listed on the page, and type them in. Answer only from the document shown.",
