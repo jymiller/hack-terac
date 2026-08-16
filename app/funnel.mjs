@@ -24,12 +24,22 @@ const STAGES = [
 ];
 
 export async function funnelState(opportunityId) {
+  // Every launched wave, so the page can offer them and so "all" can add them up. A funnel
+  // over one wave answers "did that wave work"; a funnel over all of them answers "does
+  // recruitment work" — different questions, and mixing them silently answers neither.
+  const { rows: allWaves } = await query(
+    `select id, wave, participants, cost_cents, launched_at, task_url
+       from terac_opportunities where launched_at is not null order by launched_at desc`,
+  ).catch(() => ({ rows: [] }));
+
+  const scope = opportunityId === "all" ? allWaves.map((w) => w.id) : [opportunityId].filter(Boolean);
+
   let subs = [];
   let teracError = null;
-  if (opportunityId) {
+  for (const id of scope) {
     try {
-      const r = await getSubmissions(opportunityId, "?limit=100");
-      subs = r.data ?? r.submissions ?? [];
+      const r = await getSubmissions(id, "?limit=100");
+      subs = subs.concat(r.data ?? r.submissions ?? []);
     } catch (err) {
       teracError = err.message;
     }
@@ -39,7 +49,7 @@ export async function funnelState(opportunityId) {
     query(`select terac_submission_id, payload->>'status' as status from terac_responses`),
     query(`select terac_submission_id, correct, total, duration_ms from extractions where source='human'`),
     query(`select id, wave, status, participants, cost_cents from terac_opportunities
-            where id = $1 or $1 is null order by created_at desc limit 1`, [opportunityId ?? null]),
+            where id = $1 order by created_at desc limit 1`, [opportunityId === "all" ? null : opportunityId ?? null]),
   ]);
 
   const opened = new Set(openRes.rows.map((r) => r.terac_submission_id));
@@ -62,8 +72,11 @@ export async function funnelState(opportunityId) {
 
   // Money is committed per recruited participant, so the cost of a stage is what we paid to
   // reach it — including everyone who then fell out of the next one.
-  const opp = oppRes.rows[0];
-  const cpi = opp?.participants ? (opp.cost_cents ?? 0) / opp.participants : null;
+  const inScope = opportunityId === "all" ? allWaves : allWaves.filter((w) => w.id === opportunityId);
+  const paidTotal = inScope.reduce((a, w) => a + Number(w.participants ?? 0), 0);
+  const spentTotal = inScope.reduce((a, w) => a + Number(w.cost_cents ?? 0), 0);
+  const opp = oppRes.rows[0] ?? null;
+  const cpi = paidTotal ? spentTotal / paidTotal : null;
 
   const rows = STAGES.map((st, i) => {
     const n = counts[st.key];
@@ -84,6 +97,9 @@ export async function funnelState(opportunityId) {
   const scores = [...submitted.values()];
   return {
     opportunity: opp ?? null,
+    scope: opportunityId === "all" ? "all" : opportunityId,
+    waves: allWaves,
+    spent_cents: spentTotal,
     teracError,
     stages: rows,
     byStatus,
@@ -110,6 +126,8 @@ const FLOOR = 0.9;
 const N_MIN = nMin(FLOOR);
 
 const EXTRA_CSS = `
+.picker{display:flex;gap:10px;align-items:center;margin:0 0 18px}
+.picker label{margin:0;font-size:10.5px}
 .legend{display:flex;gap:8px;align-items:center;margin:0 0 16px}
 .card .banner{margin:18px 0 0}
 `;
@@ -163,6 +181,21 @@ export function funnelPage(s) {
 
   const body = `
 <h1>Recruitment → delivery funnel</h1>
+<form class="picker" method="get" action="/funnel">
+  <label for="opportunity">Showing</label>
+  <select name="opportunity" id="opportunity" onchange="this.form.submit()">
+    <option value="all"${s.scope === "all" ? " selected" : ""}>Every wave together</option>
+    ${(s.waves ?? [])
+      .map((w) => {
+        const c = (w.task_url?.match(/[?&]cert=([a-z0-9]+)/) ?? [])[1];
+        return `<option value="${w.id}"${s.scope === w.id ? " selected" : ""}>Wave ${w.wave}${
+          c ? ` · ${c.toUpperCase()}` : ""
+        } · ${w.participants ?? "?"} paid</option>`;
+      })
+      .join("")}
+  </select>
+  <noscript><button class="ghost" type="submit">Show</button></noscript>
+</form>
 <p class="sub">Purple is everything Terac can see. Blue happens on our host, and Terac cannot see any of
 it — which is where the money actually goes missing.</p>
 
@@ -284,7 +317,9 @@ ${
 }
 
 export function registerFunnelRoutes(app) {
-  const DEFAULT = "ylz2cq7dcj710a83uo6oxkl7";
+  // Default to every wave. A single hardcoded id was silently right for one afternoon and
+  // wrong the moment a second wave launched.
+  const DEFAULT = "all";
   app.get("/api/funnel", async (req, res) => {
     try {
       res.json(await funnelState(req.query.opportunity ?? DEFAULT));
