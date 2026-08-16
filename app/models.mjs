@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { CERTS, FIELDS, INSTRUCTION, byId } from "./certs.mjs";
 import { recordExtraction } from "./extract.mjs";
+import { imageManifest, logRun } from "./explog.mjs";
 
 /**
  * The agent arm.
@@ -66,6 +67,8 @@ export async function runModel({ provider = "novita", model, certId, temperature
   const cert = byId(certId);
   if (!cert) throw new Error(`unknown certificate "${certId}"`);
   const images = await pageDataUrls(cert);
+  const manifest = await imageManifest(cert);
+  const promptText = `${INSTRUCTION}\n\n${SCHEMA_HINT}`;
 
   const body = {
     model,
@@ -75,7 +78,7 @@ export async function runModel({ provider = "novita", model, certId, temperature
       {
         role: "user",
         content: [
-          { type: "text", text: `${INSTRUCTION}\n\n${SCHEMA_HINT}` },
+          { type: "text", text: promptText },
           ...images.map((url) => ({ type: "image_url", image_url: { url } })),
         ],
       },
@@ -91,6 +94,11 @@ export async function runModel({ provider = "novita", model, certId, temperature
   const took = Date.now() - t0;
   const text = await res.text();
   if (!res.ok) {
+    await logRun({
+      source: "model", provider, modelId: `${provider}/${model}`, temperature, certId,
+      instruction: INSTRUCTION, schemaHint: SCHEMA_HINT, images: manifest,
+      rawResponse: text, durationMs: took, error: `${res.status}: ${text.slice(0, 200)}`,
+    }).catch(() => {});
     const err = new Error(`${provider}/${model} -> ${res.status}: ${text.slice(0, 200)}`);
     err.status = res.status;
     throw err;
@@ -107,7 +115,7 @@ export async function runModel({ provider = "novita", model, certId, temperature
     // A model that will not produce the schema is a real result, not an error to swallow:
     // record it as an all-wrong run so it counts against that model rather than vanishing.
     const blank = Object.fromEntries(FIELDS.map((f) => [f.key, ""]));
-    await recordExtraction({
+    const { scored: blankScored } = await recordExtraction({
       submissionId: `model_${model}_${certId}`,
       certId,
       source: "model",
@@ -115,6 +123,12 @@ export async function runModel({ provider = "novita", model, certId, temperature
       answers: blank,
       durationMs: took,
     });
+    await logRun({
+      source: "model", provider, modelId: `${provider}/${model}`, temperature, certId,
+      instruction: INSTRUCTION, schemaHint: SCHEMA_HINT, images: manifest,
+      rawResponse: content, answers: blank, scored: blankScored, durationMs: took,
+      error: "unparseable: model did not return the schema",
+    }).catch(() => {});
     return { model, certId, parsed: false, correct: 0, total: FIELDS.length, ms: took };
   }
 
@@ -126,6 +140,11 @@ export async function runModel({ provider = "novita", model, certId, temperature
     answers,
     durationMs: took,
   });
+  await logRun({
+    source: "model", provider, modelId: `${provider}/${model}`, temperature, certId,
+    instruction: INSTRUCTION, schemaHint: SCHEMA_HINT, images: manifest,
+    rawResponse: content, answers, scored, durationMs: took,
+  }).catch((e) => console.error("explog write failed:", e.message));
   return { model, certId, parsed: true, correct: scored.correct, total: scored.total, ms: took, answers };
 }
 
