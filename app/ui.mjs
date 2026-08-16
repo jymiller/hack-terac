@@ -104,6 +104,7 @@ const TABS = [
   ["/design", "Designer"],
   ["/funnel", "Funnel"],
   ["/results", "Results"],
+  ["/optimize", "Economics"],
   ["/support", "Support"],
 ];
 

@@ -41,6 +41,9 @@ export function ensureLog() {
       total            integer,
       detail           jsonb,
       duration_ms      integer,
+      -- What the run consumed. Without this there is no cost per document, and "which model
+      -- is cheap enough" is unanswerable -- the envelope's usage block was being discarded.
+      usage            jsonb,
       error            text,
       app_commit       text,
       created_at       timestamptz not null default now()
@@ -49,6 +52,7 @@ export function ensureLog() {
       create index if not exists explog_model_idx on experiment_runs (model_id);
       create index if not exists explog_prompt_idx on experiment_runs (prompt_sha);
       create index if not exists explog_cert_idx on experiment_runs (cert_id);
+      alter table experiment_runs add column if not exists usage jsonb;
     `),
   );
   return ready;
@@ -114,6 +118,7 @@ export async function logRun({
   answers = null,
   scored = null,
   durationMs = null,
+  usage = null,
   error = null,
 }) {
   await ensureLog();
@@ -135,9 +140,13 @@ export async function logRun({
     `insert into experiment_runs
        (run_key, source, provider, model_id, temperature, cert_id,
         instruction, instruction_sha, schema_hint, prompt_sha,
-        images, images_sha, raw_response, answers, correct, total, detail, duration_ms, error, app_commit)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-     on conflict (run_key) do nothing
+        images, images_sha, raw_response, answers, correct, total, detail, duration_ms, usage, error, app_commit)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+     -- Append-only on everything that describes the run. usage is the one exception: it is
+     -- part of the same historical fact, and it was being discarded before we captured it.
+     -- Filling a null is completing the record; it never overwrites a usage already stored.
+     on conflict (run_key) do update
+       set usage = coalesce(experiment_runs.usage, excluded.usage)
      returning id`,
     [
       runKey, source, provider, modelId, temperature, certId,
@@ -147,7 +156,7 @@ export async function logRun({
       answers ? JSON.stringify(answers) : null,
       scored?.correct ?? null, scored?.total ?? null,
       scored?.fields ? JSON.stringify(scored.fields) : null,
-      durationMs, error, await appCommit(),
+      durationMs, usage ? JSON.stringify(usage) : null, error, await appCommit(),
     ],
   );
   return rows[0]?.id ?? null;

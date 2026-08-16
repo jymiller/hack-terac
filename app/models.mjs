@@ -110,6 +110,8 @@ export async function runModel({ provider = "novita", model, certId, temperature
     throw new Error(`${provider}/${model} returned unparseable envelope`);
   }
   const content = json.choices?.[0]?.message?.content ?? "";
+  // The envelope's usage block is the only record of what the run cost. It was being dropped.
+  const usage = json.usage ?? null;
   const answers = parseAnswer(typeof content === "string" ? content : JSON.stringify(content));
   if (!answers) {
     // A model that will not produce the schema is a real result, not an error to swallow:
@@ -126,7 +128,7 @@ export async function runModel({ provider = "novita", model, certId, temperature
     await logRun({
       source: "model", provider, modelId: `${provider}/${model}`, temperature, certId,
       instruction: INSTRUCTION, schemaHint: SCHEMA_HINT, images: manifest,
-      rawResponse: content, answers: blank, scored: blankScored, durationMs: took,
+      rawResponse: content, answers: blank, scored: blankScored, durationMs: took, usage,
       error: "unparseable: model did not return the schema",
     }).catch(() => {});
     return { model, certId, parsed: false, correct: 0, total: FIELDS.length, ms: took };
@@ -143,7 +145,7 @@ export async function runModel({ provider = "novita", model, certId, temperature
   await logRun({
     source: "model", provider, modelId: `${provider}/${model}`, temperature, certId,
     instruction: INSTRUCTION, schemaHint: SCHEMA_HINT, images: manifest,
-    rawResponse: content, answers, scored, durationMs: took,
+    rawResponse: content, answers, scored, durationMs: took, usage,
   }).catch((e) => console.error("explog write failed:", e.message));
   return { model, certId, parsed: true, correct: scored.correct, total: scored.total, ms: took, answers };
 }

@@ -24,6 +24,7 @@ import { boardPage, boardState } from "./board.mjs";
 import { registerFunnelRoutes } from "./funnel.mjs";
 import { registerModelRoutes } from "./models.mjs";
 import { registerResultsRoutes } from "./results.mjs";
+import { registerOptimizeRoutes } from "./optimize.mjs";
 import { registerLogRoutes } from "./explog.mjs";
 
 const FLOOR = 0.9;
@@ -78,6 +79,7 @@ registerSupportRoutes(app);
 registerFunnelRoutes(app);
 registerModelRoutes(app, express.json());
 registerResultsRoutes(app);
+registerOptimizeRoutes(app);
 registerLogRoutes(app);
 // Certificate pages the worker and the models both read.
 app.use("/docs", express.static("public/docs", { maxAge: "1h" }));
