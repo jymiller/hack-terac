@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import { query } from "./db.mjs";
 import { CERTS, FIELDS, INSTRUCTION, byId, scoreAnswer, verifyFixtures } from "./certs.mjs";
 import { refFor, supportNumber } from "./support.mjs";
@@ -65,6 +66,9 @@ export async function recordExtraction({
   return { row: rows[0], scored };
 }
 
+export const WALKUP_WAVE = "walkup";
+export const WALKUP_PREFIX = "walk_";
+
 export function registerExtractRoutes(app) {
   const json = express.json();
   const form = express.urlencoded({ extended: false });
@@ -92,26 +96,61 @@ export function registerExtractRoutes(app) {
    * region, no pre-filled figure. Asking someone to confirm a value we already found
    * measures whether they can read; asking them to find it measures the actual job.
    */
+  /**
+   * The open door. One stable URL an expert can be handed, scanned, or typed — no Terac
+   * submission id, no query string. Each visit mints its own id so two people on the same
+   * link get their own certificate and their own row.
+   */
+  app.get("/expert", (_req, res) => {
+    const id = `${WALKUP_PREFIX}${crypto.randomBytes(6).toString("hex")}`;
+    res.redirect(302, `/x/${WALKUP_WAVE}?teracSubmissionId=${id}`);
+  });
+
+  app.get("/thanks", (req, res) => {
+    const ref = String(req.query.ref ?? "");
+    res.type("html").send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Thank you</title><style>
+:root{color-scheme:light dark;--bg:#fbfaf8;--fg:#18181b;--mut:#6b7280;--line:#e4e4e7;--card:#fff;--acc:#1d4ed8}
+@media(prefers-color-scheme:dark){:root{--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--acc:#60a5fa}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:32px;max-width:520px}
+h1{font-size:25px;margin:0 0 10px}p{color:var(--mut);font-size:15px}code{font-size:13px}
+a{color:var(--acc)}</style></head><body><div class="card">
+<h1>Thank you — that's recorded.</h1>
+<p>Your reading has been scored against what the certificate actually prints, and it now sits
+alongside the model runs on the same document.</p>
+<p>Your reference is <strong><code>${ref.replace(/[^\w-]/g, "")}</code></strong>.</p>
+<p><a href="/results">See how you did against the models &rarr;</a> &nbsp;·&nbsp;
+<a href="/expert">Read another certificate</a></p>
+</div></body></html>`);
+  });
+
   app.get("/x/:wave", async (req, res) => {
     const sid = req.query.teracSubmissionId ?? req.query.submissionId;
     if (!sid) return res.status(400).send("This link is missing its Terac submission id.");
     const cert = certFor(sid);
-    try {
-      await ensureSchema();
-      await query(
-        `insert into terac_responses (terac_submission_id, task_id, opportunity_id, payload)
-         values ($1,$2,$3,$4)
-         on conflict (terac_submission_id) do update set payload = excluded.payload
-         where terac_responses.payload->>'status' is distinct from 'completed'`,
-        [
-          sid,
-          req.query.taskId ?? null,
-          req.query.opportunityId ?? null,
-          { status: "opened", wave: req.params.wave, cert: cert.id, opened_at: new Date().toISOString() },
-        ],
-      );
-    } catch (err) {
-      console.error("extract open receipt failed:", err.message);
+    const walkup = req.params.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
+    // Arrival receipts exist to measure the Terac funnel. A walk-up was never recruited,
+    // so recording one there would count a stranger as a participant we paid for.
+    if (!walkup) {
+      try {
+        await ensureSchema();
+        await query(
+          `insert into terac_responses (terac_submission_id, task_id, opportunity_id, payload)
+           values ($1,$2,$3,$4)
+           on conflict (terac_submission_id) do update set payload = excluded.payload
+           where terac_responses.payload->>'status' is distinct from 'completed'`,
+          [
+            sid,
+            req.query.taskId ?? null,
+            req.query.opportunityId ?? null,
+            { status: "opened", wave: req.params.wave, cert: cert.id, opened_at: new Date().toISOString() },
+          ],
+        );
+      } catch (err) {
+        console.error("extract open receipt failed:", err.message);
+      }
     }
     res.type("html").send(
       extractPage({
@@ -128,6 +167,10 @@ export function registerExtractRoutes(app) {
     const b = req.body ?? {};
     const sid = b.teracSubmissionId;
     const certId = b.certId;
+    // A walk-up reader came through the open link, not through Terac. Their work is real
+    // and worth recording, but it is not paid panel evidence and is never redirected to
+    // Terac's callback, which would try to settle a submission that does not exist.
+    const walkup = b.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
     if (!sid || !certId) return res.status(400).json({ error: "teracSubmissionId and certId required" });
     try {
       // The unique index carries model_id, which is NULL for every human row, and Postgres
@@ -136,8 +179,8 @@ export function registerExtractRoutes(app) {
       // counts it as independent evidence. Pay them either way; just don't count it twice.
       await ensureSchema();
       const { rows: dup } = await query(
-        `select 1 from extractions where terac_submission_id = $1 and source = 'human' limit 1`,
-        [sid],
+        `select 1 from extractions where terac_submission_id = $1 and source = $2 limit 1`,
+        [sid, walkup ? "walkup" : "human"],
       );
       if (dup.length) {
         const url =
@@ -153,18 +196,21 @@ export function registerExtractRoutes(app) {
         submissionId: sid,
         wave: b.wave,
         certId,
-        source: "human",
+        source: walkup ? "walkup" : "human",
         answers,
         durationMs: Number(b.durationMs) || null,
       });
-      await query(
-        `update terac_responses set payload = payload || $2::jsonb
-          where terac_submission_id = $1`,
-        [sid, JSON.stringify({ status: "completed", submitted_at: new Date().toISOString() })],
-      ).catch(() => {});
-      const url =
-        `https://terac.com/api/external/callback?teracSubmissionId=${encodeURIComponent(sid)}` +
-        `&taskId=${encodeURIComponent(b.taskId ?? "")}&result=completed`;
+      if (!walkup) {
+        await query(
+          `update terac_responses set payload = payload || $2::jsonb
+            where terac_submission_id = $1`,
+          [sid, JSON.stringify({ status: "completed", submitted_at: new Date().toISOString() })],
+        ).catch(() => {});
+      }
+      const url = walkup
+        ? `/thanks?ref=${encodeURIComponent(sid)}`
+        : `https://terac.com/api/external/callback?teracSubmissionId=${encodeURIComponent(sid)}` +
+          `&taskId=${encodeURIComponent(b.taskId ?? "")}&result=completed`;
       if (req.is("application/x-www-form-urlencoded")) return res.redirect(303, url);
       res.status(201).json({ ok: true, redirect: url });
     } catch (err) {
