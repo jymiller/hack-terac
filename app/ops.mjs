@@ -422,6 +422,10 @@ ${s.corpus
     <div><label>Claims / task</label><input id="claimsPerTask" type="number" value="20" min="1" max="60"></div>
     <div><label>Minutes / task</label><input id="minutes" type="number" value="10" min="1"></div>
     <div><label>Window (days, min 5)</label><input id="days" type="number" value="5" min="5"></div>
+    <div><label>Certificate</label><select id="certId">
+      ${CERTS.map((c) => `<option value="${c.id}">${c.id} — ${c.pages}pp</option>`).join("")}
+      <option value="">any (assigned by hash)</option>
+    </select></div>
     <button class="ghost" onclick="draftIt()">Build draft (free)</button>
   </div>
   <pre id="draftout" style="display:none"></pre>
@@ -469,7 +473,7 @@ const out=(id,v)=>{const e=document.getElementById(id);e.style.display="block";e
 async function post(u,b){const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})});return[r.ok,await r.json()]}
 async function draftIt(){
   out("draftout","building draft…");
-  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,claimsPerTask:+claimsPerTask.value});
+  const[ok,j]=await post("/api/ops/draft",{participants:+participants.value,minutes:+minutes.value,days:+days.value,claimsPerTask:+claimsPerTask.value,certId:certId.value});
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
 async function feas(){
