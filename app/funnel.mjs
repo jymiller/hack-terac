@@ -20,7 +20,7 @@ const STAGES = [
   { key: "screened", label: "Passed screening", who: "terac" },
   { key: "arrived", label: "Opened the task", who: "us" },
   { key: "submitted", label: "Submitted answers", who: "us" },
-  { key: "scored", label: "Scored against ground truth", who: "us" },
+  { key: "scored", label: "Marked against the answers", who: "us" },
 ];
 
 export async function funnelState(opportunityId) {
@@ -170,7 +170,7 @@ export function funnelPage(s) {
   const applied = s.stages[0].n;
   const scoredN = s.stages[s.stages.length - 1].n;
   const svg = `<svg viewBox="0 0 ${W} ${svgH}" width="100%" height="${svgH}" role="img"
-     aria-label="Funnel from ${applied} applicants to ${scoredN} scored extractions">
+     aria-label="Funnel from ${applied} applicants to ${scoredN} marked readings">
   <style>
     .fn{fill:var(--fg);font:700 21px ui-sans-serif,system-ui;font-variant-numeric:tabular-nums}
     .fl{fill:var(--fg);font:600 12.5px ui-sans-serif,system-ui}
@@ -180,7 +180,7 @@ export function funnelPage(s) {
   </style>${bands}</svg>`;
 
   const body = `
-<h1>Recruitment → delivery funnel</h1>
+<h1>From applicants to finished work</h1>
 <form class="picker" method="get" action="/funnel">
   <label for="opportunity">Showing</label>
   <select name="opportunity" id="opportunity" onchange="this.form.submit()">
@@ -196,14 +196,13 @@ export function funnelPage(s) {
   </select>
   <noscript><button class="ghost" type="submit">Show</button></noscript>
 </form>
-<p class="sub">Purple is everything Terac can see. Blue happens on our host, and Terac cannot see any of
-it — which is where the money actually goes missing.</p>
+<p class="sub">Purple is what Terac can see. Blue happens on our site, and that is where the money
+goes missing.</p>
 
 ${
   s.teracError
-    ? `<div class="banner syn">Terac did not answer: <code>${s.teracError}</code>. The applied and
-       screening counts below are <b>missing, not zero</b> — read nothing into the funnel's top two bands
-       until it responds.</div>`
+    ? `<div class="banner syn">Terac did not answer: <code>${s.teracError}</code>. The top two numbers are
+       <b>missing, not zero</b> — ignore them until it responds.</div>`
     : ""
 }
 
@@ -216,20 +215,17 @@ ${
   <p class="sowhat">${
     applied
       ? `<b>${scoredN} of ${applied} applicants produced usable work — ${pct(scoredN / applied)}.</b>
-         Terac's record ends at the purple bands; the ${s.ghost} lost between screening and "opened the
-         task" appears on no recruitment dashboard, because only an arrival receipt on our host
-         distinguishes a working participant from one who never showed. Size the next wave off the blue
-         end of this shape, not the purple top of it.`
-      : `No applicants have been returned for this opportunity, so <b>the shape below is not yet evidence
-         of anything</b>. All it shows is the boundary: purple stages Terac reports, blue stages that exist
-         only because we record them.`
+         Terac's record stops at the purple bands. The ${s.ghost} lost between screening and opening the
+         task show up on no recruitment dashboard: only our own record of who turned up tells someone
+         working from someone who never showed. Size the next wave off the blue end, not the purple top.`
+      : `No applicants have come back for this wave, so <b>the shape below proves nothing yet</b>. It only
+         shows the line: purple is what Terac reports, blue exists only because we record it.`
   }</p>
 ${
   s.ghost > 0
-    ? `<div class="banner syn"><b>${s.ghost} participant${s.ghost === 1 ? "" : "s"} passed screening and never loaded the task.</b>
-   Terac counts them as in-progress and will hold or charge for them. Only an arrival receipt on our
-   side can tell that apart from someone who is genuinely working — which is exactly the number a
-   recruitment dashboard cannot show you.</div>`
+    ? `<div class="banner syn"><b>${s.ghost} ${s.ghost === 1 ? "person" : "people"} passed screening and never opened the task.</b>
+   Terac counts them as working and will still hold or charge for them. Only our own record of who
+   turned up tells them apart from someone genuinely mid-task.</div>`
     : ""
 }
 </div>
@@ -238,39 +234,38 @@ ${
 <div class="grid">
   <div><label>Cost per recruit</label><div class="big">${money(s.cpi_cents)}</div></div>
   <div><label>Paid, never arrived</label><div class="big ${s.ghost > 0 ? "bad" : ""}">${s.ghost}</div></div>
-  <div><label>Arrived, abandoned</label><div class="big ${s.abandoned > 0 ? "warn" : ""}">${s.abandoned}</div></div>
-  <div><label>Spent on non-delivery</label><div class="big ${s.wasted_cents ? "bad" : ""}">${money(s.wasted_cents)}</div></div>
+  <div><label>Arrived, then left</label><div class="big ${s.abandoned > 0 ? "warn" : ""}">${s.abandoned}</div></div>
+  <div><label>Paid for no work</label><div class="big ${s.wasted_cents ? "bad" : ""}">${money(s.wasted_cents)}</div></div>
 </div>
 <p class="sowhat">${
     s.wasted_cents == null
-      ? `The ${s.ghost + s.abandoned} recruits who cleared screening and delivered nothing cannot be
-         priced: this opportunity carries no cost and participant count yet. <b>The leak is visible here,
-         its value is not</b> — until the opportunity records both, do not quote a waste figure.`
-      : `<b>${money(s.wasted_cents)} of this wave's recruitment spend bought no work at all</b> —
-         ${s.ghost} cleared screening and never opened the task, ${s.abandoned} opened it and left without
-         answers. At ${money(s.cpi_cents)} a recruit that loss scales with the wave, so it is worth fixing
-         the screening and the hand-off before buying a bigger one.`
+      ? `<b>We can see the leak but not what it cost.</b> ${s.ghost + s.abandoned} people passed screening
+         and delivered nothing, but this wave has no cost or headcount recorded yet — so do not quote a
+         waste figure.`
+      : `<b>${money(s.wasted_cents)} of this wave's spend bought no work at all</b> — ${s.ghost} passed
+         screening and never opened the task, ${s.abandoned} opened it and left without answers. At
+         ${money(s.cpi_cents)} a head that loss grows with every wave, so fix the screening and the
+         hand-off before buying a bigger one.`
   }</p>
 
 <h2>Delivered work</h2>
 <div class="grid">
-  <div><label>Field accuracy</label><div class="big">${s.field_accuracy == null ? "—" : pct(s.field_accuracy)}</div></div>
+  <div><label>Answers they got right</label><div class="big">${s.field_accuracy == null ? "—" : pct(s.field_accuracy)}</div></div>
   <div><label>Median time on task</label><div class="big">${s.median_seconds ? s.median_seconds + "s" : "—"}</div></div>
-  <div><label>Usable extractions</label><div class="big">${s.stages.find((x) => x.key === "scored").n}</div></div>
+  <div><label>Readings we can use</label><div class="big">${s.stages.find((x) => x.key === "scored").n}</div></div>
 </div>
 <p class="sowhat">${
     scoredN === 0
-      ? `<b>Nothing here is evidence yet.</b> With no scored extractions, accuracy and time on task are
-         undefined, and no field can be licensed or ruled out from this wave at all.`
-      : `<b>The ${scoredN} scored extraction${scoredN === 1 ? "" : "s"}, not the accuracy beside them, is what
-         this wave bought.</b> Each one is a single reading of every field on the certificate it covers, and
-         a field needs ${N_MIN} clean readings before a 95% lower bound can clear the ${FLOOR.toFixed(2)} floor — so
-         whether anything gets licensed depends on how many people read the <i>same</i> certificate, which
-         this total cannot tell you. Median time on task prices the next human wave; it says nothing about
-         whether the step can run without one.`
+      ? `<b>Nothing here is evidence yet.</b> With nothing marked there is no accuracy or time to report, and
+         this wave can neither clear anything for automation nor rule it out.`
+      : `<b>What this wave bought is ${scoredN} marked reading${scoredN === 1 ? "" : "s"}, not the accuracy
+         beside them.</b> Each is one person reading one certificate, and it takes ${N_MIN} clean readings
+         before we can call one of the eight things safe to automate — so whether anything gets there
+         depends on how many people read the <i>same</i> certificate, which this total cannot tell you.
+         Median time prices the next human wave; it says nothing about whether the step needs a person.`
   }</p>
 
-<h2>Terac submission states</h2>
+<h2>What Terac thinks is happening</h2>
 <div class="card"><table><tr><th>Status</th><th class="num">Count</th><th>Meaning</th></tr>
 ${
   Object.keys(s.byStatus).length
@@ -295,14 +290,13 @@ ${
 </table>
 <p class="sowhat">${
     Object.keys(s.byStatus).length
-      ? `<b>These are Terac's beliefs about the work, not observations of it.</b> <code>in_progress</code>
-         covers both a participant mid-task and one who never opened it; only the arrival count above
-         separates the two. Reconcile against that before you chase, approve or re-recruit anyone on the
-         strength of this column.`
-      : `<b>An empty status column rules nothing out.</b> ${
+      ? `<b>This is what Terac believes, not what happened.</b> <code>in_progress</code> covers both someone
+         mid-task and someone who never opened it; only the arrival count above tells them apart. Check
+         that before you chase, approve or re-recruit anyone.`
+      : `<b>An empty column rules nothing out.</b> ${
           s.teracError
-            ? "Terac errored rather than returning zero submissions, so this wave's recruitment state is unknown right now."
-            : "No submissions came back for this opportunity, so there is no recruitment state to reconcile against our arrival and scoring counts."
+            ? "Terac errored instead of returning zero submissions, so we do not know where this wave stands."
+            : "No submissions came back for this wave, so there is nothing here to check our own counts against."
         }`
   }</p>
 </div>`;

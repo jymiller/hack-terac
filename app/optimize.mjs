@@ -6,14 +6,14 @@ import { page } from "./ui.mjs";
 import { readCostCents, money, priceFor, PRICES_AS_OF, PRICE_SOURCE } from "./economics.mjs";
 
 /**
- * What a trusted read costs.
+ * What it costs to read one document.
  *
- * An agent reads every document either way, so "human versus model" is not the decision. The
- * decisions are: which is the CHEAPEST agent that reads well enough, and what does the human
- * attestation on top of it cost. This page answers those two and nothing else.
+ * Software reads every document either way, so "person versus model" is not the decision. The
+ * decisions are: which software reads well enough for the least money, and what does the
+ * person's signature on top of it cost. This page answers those two and nothing else.
  *
- * The human is not here to beat the models. On this evidence it does not, and saying so
- * plainly is the point — an attestation is bought for trust, not for accuracy, and pretending
+ * The person is not here to beat the models. On this evidence they do not, and saying so
+ * plainly is the point — a signature is bought for trust, not for accuracy, and pretending
  * otherwise would misprice the whole operation.
  */
 
@@ -151,7 +151,7 @@ export function optimizePage(s) {
         !isHuman && s.cheapest && r.id === s.cheapest.id
           ? ` <span class="tag ok">${s.provisional ? "cheapest at this accuracy" : "cheapest that clears"}</span>`
           : ""
-      }${isHuman ? ' <span class="tag dim">attestation</span>' : ""}</td>
+      }${isHuman ? ' <span class="tag dim">signature</span>' : ""}</td>
       <td class="num">${r.correct}/${r.total}</td>
       <td style="min-width:150px">
         <div class="bar ${isHuman ? "h" : ""}"><i style="width:${(r.rate ?? 0) * 100}%"></i></div>
@@ -175,47 +175,47 @@ export function optimizePage(s) {
   };
 
   const body = `
-<h1>What a trusted read costs</h1>
-<p class="sub">An agent reads every document either way, so this is not a contest between a person and a
-machine. Two separate questions: <b>which is the cheapest agent that reads well enough</b>, and
-<b>what does the human attestation on top of it cost</b>.</p>
+<h1>What it costs to read one document</h1>
+<p class="sub">Software reads every document either way, so this is not people against machines. Two
+questions: <b>which software reads well enough for the least money</b>, and <b>what does a person's
+signature on top of it cost</b>.</p>
 
 <div class="hero">
   <div class="${s.cheapest ? "win" : ""}">
-    <label>${s.provisional ? "Cheapest at the best accuracy seen" : `Cheapest agent clearing ${(s.floor * 100).toFixed(0)}%`}</label>
+    <label>${s.provisional ? "Cheapest at the best score so far" : `Cheapest software clearing ${(s.floor * 100).toFixed(0)}%`}</label>
     <div class="big">${s.cheapest ? money(s.cheapest.cost_cents) : "—"}</div>
     <div class="k">${
       s.cheapest
-        ? `${s.cheapest.name} · ${pct(s.cheapest.rate)} on ${s.cheapest.total} fields${
-            s.provisional ? " · not yet licensed" : ""
+        ? `${s.cheapest.name} · ${pct(s.cheapest.rate)} of ${s.cheapest.total} answers right${
+            s.provisional ? " · not enough evidence yet" : ""
           }`
-        : "no agent measured yet"
+        : "nothing measured yet"
     }</div>
   </div>
   <div>
-    <label>One human attestation</label>
+    <label>One human signature</label>
     <div class="big">${h.cost_cents == null ? "—" : "$" + (h.cost_cents / 100).toFixed(2)}</div>
     <div class="k">${h.n} reading${h.n === 1 ? "" : "s"} so far, median ${secs(h.median_s)}</div>
   </div>
   <div>
-    <label>The human multiple</label>
+    <label>The person costs this much more</label>
     <div class="big">${ratio ? ratio.toLocaleString() + "×" : "—"}</div>
-    <div class="k">what one attestation costs, in units of the cheapest sufficient agent</div>
+    <div class="k">one signature, priced in reads by the cheapest software good enough</div>
   </div>
   <div>
     <label>Per 1,000 documents</label>
     <div class="big">${s.cheapest ? "$" + s.cheapest.per_1000.toFixed(2) : "—"}</div>
-    <div class="k">${h.cost_cents ? "against $" + ((h.cost_cents * 1000) / 100).toLocaleString() + " to have people read them" : ""}</div>
+    <div class="k">${h.cost_cents ? "against $" + ((h.cost_cents * 1000) / 100).toLocaleString() + " if people read them" : ""}</div>
   </div>
 </div>
 
 ${
   s.provisional
-    ? `<p class="sowhat" style="margin-bottom:22px"><b>No agent is licensed yet, and none can be on this
-       much evidence.</b> Three documents is ${s.readers[0]?.total ?? 24} field readings, and a 95% lower
-       bound cannot reach ${(s.floor * 100).toFixed(0)}% on fewer than ${s.n_min} clean ones however
-       perfect the run. The costs below are measured and final; the accuracy column is provisional and
-       the ranking above is <b>cheapest at the best observed accuracy</b>, not a licence.</p>`
+    ? `<p class="sowhat" style="margin-bottom:22px"><b>Nothing is safe to automate yet, and nothing can
+       be on three documents.</b> That is ${s.readers[0]?.total ?? 24} answers, and being 95% sure of
+       ${(s.floor * 100).toFixed(0)}% takes ${s.n_min} clean ones however perfect the run. The costs are
+       measured and final; the accuracy is not settled, so the ranking above is <b>cheapest at the best
+       score so far</b>.</p>`
     : ""
 }
 
@@ -244,29 +244,24 @@ ${s.readers
   )
   .join("")}
 </tbody></table>
-<p class="sowhat"><b>Per correct reading is the number to rank on.</b> A model at half accuracy is not
-half as useful — it is twice as expensive for every answer you can actually use, and a raw price list
-hides that. It is simply what a document costs divided by how often that model gets it right, so a
-reader that never gets one right has no finite price at all.</p>
-<p class="sowhat">The per-1,000 column is priced the same way, so it is what a thousand documents cost
-you in <em>usable</em> readings rather than in attempts.</p>
-<p class="sowhat"><b>Read this ranking with one caveat, and it is the important one.</b> Dividing by
-accuracy assumes you can tell which readings were wrong and pay again for those. You cannot — a model
-that misreads a figure returns it with exactly the same confidence as a correct one, and nothing in the
-output says which is which. So a cheap reader at ${(() => {
+<p class="sowhat"><b>Rank on what a correct reading costs.</b> A model that is right half the time is
+not half as useful, it is twice as dear per answer you can use. It is the price of a document divided
+by how often the model gets it right — get none right and there is no price at all.</p>
+<p class="sowhat"><b>One catch, and it matters.</b> Dividing by accuracy assumes you can tell which
+readings were wrong and buy those again. You cannot: a wrong answer comes back looking exactly like a
+right one. So a cheap reader at ${(() => {
     const g = s.readers.filter((r) => r.cost_per_good != null && r.rate < 1).sort((a,b)=>a.cost_per_good-b.cost_per_good)[0];
     return g ? pct(g.rate) : "under 100%";
-  })()} is only better value <em>if something else catches its mistakes</em>. That something else is the
-attestation, which is why the two costs below are not alternatives to each other.</p>
-<p class="src">Token prices: ${s.price_source}, read ${s.prices_as_of}. Cost is measured token usage at
-those list rates. <span class="dim">unpriced</span> readers are omitted from this table rather than
-shown as free.</p>
+  })()} is only good value <em>if something catches its mistakes</em>. That is what the
+person is for.</p>
+<p class="src">Prices: ${s.price_source}, read ${s.prices_as_of}. Cost is the tokens actually used at
+those list rates. Models we have no price for are left out rather than shown as free.</p>
 </div>
 
 <h2>What the people cost</h2>
 <div class="card">
   <div class="grid">
-    <div><label>Per attestation</label><div class="big">${h.cost_cents == null ? "—" : "$" + (h.cost_cents / 100).toFixed(2)}</div></div>
+    <div><label>Per signature</label><div class="big">${h.cost_cents == null ? "—" : "$" + (h.cost_cents / 100).toFixed(2)}</div></div>
     <div><label>Accuracy</label><div class="big">${pct(h.rate)}</div><div class="k">${h.correct}/${h.total} answers</div></div>
     <div><label>Per correct reading</label><div class="big">${
       h.rate ? "$" + (h.cost_cents / 100 / h.rate).toFixed(2) : "—"
@@ -275,11 +270,10 @@ shown as free.</p>
       h.rate && h.cost_cents ? "$" + Math.round((h.cost_cents / 100 / h.rate) * 1000).toLocaleString() : "—"
     }</div></div>
   </div>
-  <p class="sowhat">Kept separate on purpose. <b>People and software are not competing for the same
-  job</b> — the software reads every document either way, and the person is there because a
-  counterparty will not accept software's word. Ranking them in one table would suggest you could
-  drop whichever loses, and you cannot: you are buying a reading from one and a signature from the
-  other.</p>
+  <p class="sowhat"><b>Separate on purpose.</b> The software reads every document either way; the
+  person is there because the other side of the deal will not take software's word for it. You are
+  buying a reading from one and a signature from the other, so neither can be dropped for being
+  dearer.</p>
 </div>
 
 <h2>What would this cost at your volume?</h2>
@@ -293,13 +287,14 @@ shown as free.</p>
   <div id="volout"></div>
 </div>
 
-<h2>How much evidence would it take to trust one of them?</h2>
+<h2>How much evidence before we can trust the software?</h2>
 <div class="card">
-  <p class="sub">A reader is licensed when the <em>bottom</em> of its 95% interval clears the floor, which
-  is why perfect scores on a handful of documents still read as undecided.</p>
+  <p class="sub">Software is safe to automate when the <em>bottom</em> of its 95% confidence range clears
+  the floor (the Wilson 95% lower bound). That is why a perfect score on a handful of documents still
+  counts as undecided.</p>
   <div class="row">
     <div><label>Floor (%)</label><input id="floor" type="number" value="${(s.floor * 100).toFixed(0)}" min="50" max="99.5" step="0.5"></div>
-    <div><label>Human cost ($/reading)</label><input id="cpi" type="number" value="${h.cost_cents ? (h.cost_cents / 100).toFixed(2) : "12.00"}" step="0.25"></div>
+    <div><label>What a person costs ($/reading)</label><input id="cpi" type="number" value="${h.cost_cents ? (h.cost_cents / 100).toFixed(2) : "12.00"}" step="0.25"></div>
     <button class="ghost" onclick="target()">What would it take?</button>
   </div>
   <div id="tgt"></div>
@@ -324,11 +319,11 @@ function vol(){
     <div><label>Software reads them all</label><div class="big">\${usd(read)}</div>
       <div class="k">\${BEST.name}, per correct reading</div></div>
     <div><label>Signatures on \${Math.round(share*100)}%</label><div class="big">\${sign==null?"—":usd(sign)}</div>
-      <div class="k">\${Math.round(docs*share).toLocaleString()} attestations</div></div>
+      <div class="k">\${Math.round(docs*share).toLocaleString()} signatures</div></div>
     <div><label>Total a month</label><div class="big">\${sign==null?usd(read):usd(read+sign)}</div>
       <div class="k">\${sign==null?"":Math.round((sign/(read+sign))*100)+"% of it is the signatures"}</div></div>
   </div>
-  <p class="sowhat">\${sign==null?"":"<b>The reading is not the cost — the signatures are.</b> Software reads every one of those "+docs.toLocaleString()+" documents for "+usd(read)+", and attesting to "+Math.round(share*100)+"% of them costs "+usd(sign)+". Moving that percentage is worth far more than changing model."}</p>\`;
+  <p class="sowhat">\${sign==null?"":"<b>The reading is not the cost — the signatures are.</b> Software reads all "+docs.toLocaleString()+" documents for "+usd(read)+", and signing off on "+Math.round(share*100)+"% of them costs "+usd(sign)+". Changing that percentage matters far more than changing model."}</p>\`;
 }
 vol();
 async function target(){
@@ -339,19 +334,19 @@ async function target(){
   <div class="grid" style="margin-top:14px">
     <div><label>Clean readings needed</label><div class="big">\${d.n_min}</div></div>
     <div><label>If one is wrong</label><div class="big">\${d.need_with_one_miss ?? "—"}</div></div>
-    <div><label>Cost in human readings</label><div class="big">$\${(d.human_cost_cents/100).toFixed(2)}</div></div>
-    <div><label>Cost in agent reads</label><div class="big">\${d.agent_cost_label}</div></div>
+    <div><label>Cost if people read them</label><div class="big">$\${(d.human_cost_cents/100).toFixed(2)}</div></div>
+    <div><label>Cost if software reads them</label><div class="big">\${d.agent_cost_label}</div></div>
   </div>
-  <p class="sowhat">To license anything at \${(d.floor*100).toFixed(1)}% you need <b>\${d.n_min} readings with
-  nothing wrong in them</b>. Buying that evidence from people costs $\${(d.human_cost_cents/100).toFixed(2)};
-  buying it from the cheapest sufficient agent costs \${d.agent_cost_label}. <b>Ruling a reader out is cheap
-  and licensing one is expensive</b> — a single clear failure settles the first, while the second needs an
-  unbroken run, and one wrong answer among them pushes the requirement to \${d.need_with_one_miss ?? "—"}.</p>\`;
+  <p class="sowhat">To call anything safe to automate at \${(d.floor*100).toFixed(1)}% you need <b>\${d.n_min}
+  readings with nothing wrong in them</b>. That evidence costs $\${(d.human_cost_cents/100).toFixed(2)} from
+  people, or \${d.agent_cost_label} from the cheapest software good enough. <b>Ruling a reader out is cheap;
+  clearing one is expensive</b> — one clear failure settles the first, the second needs an unbroken run, and
+  a single wrong answer pushes it to \${d.need_with_one_miss ?? "—"}.</p>\`;
 }
 target();
 `;
 
-  return page({ title: "Reader economics", current: "/", body, extraCss: EXTRA_CSS, script });
+  return page({ title: "What a read costs", current: "/", body, extraCss: EXTRA_CSS, script });
 }
 
 export function registerOptimizeRoutes(app) {

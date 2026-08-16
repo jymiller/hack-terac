@@ -108,8 +108,8 @@ export function boardPage(s) {
   const open = s.fields.length - licensed - ruledOut;
 
   const headline = s.human_n
-    ? `${licensed} of ${s.fields.length} fields are licensed to run with no human in the loop, ${ruledOut} are ruled out, and ${open} still ${open === 1 ? "lacks" : "lack"} the evidence to decide either way.`
-    : `Nothing is licensed yet: no paid human reading has arrived, so all ${s.fields.length} fields sit unmeasured and every figure below is a fixture.`;
+    ? `${licensed} of the ${s.fields.length} things are safe to leave to software, ${ruledOut} still need a person, and ${open} ${open === 1 ? "has" : "have"} too little evidence to call either way.`
+    : `Nothing is safe to automate yet: nobody we paid has read anything, so all ${s.fields.length} are unread and every number below is demo data.`;
 
   const fieldRows = s.fields
     .map((f) => {
@@ -129,7 +129,7 @@ export function boardPage(s) {
       <td class="num">${pct(f.human_rate)}</td>
       <td class="num mut">${f.human.n ? `${pct(f.human_lo)} – ${pct(f.human_hi)}` : "—"}</td>
       <td><span class="tag ${cls}">${says}</span></td>
-      <td>${models || '<span class="mut">no model runs</span>'}</td>
+      <td>${models || '<span class="mut">software has not read it</span>'}</td>
     </tr>`;
     })
     .join("");
@@ -144,81 +144,75 @@ export function boardPage(s) {
     : `<tr><td colspan="4" class="mut">No wrong answers recorded yet.</td></tr>`;
 
   const trapSoWhat = s.distractors.length
-    ? `<b>These are the errors a checker cannot catch.</b> Every wrong value here is a real figure printed on the same
-       page — usually the prior period's — so a citation check passes on it and only a second reading finds it. Where the
-       Models column runs ahead of the Humans column, that field stays manual whatever its headline rate says.`
-    : `<b>An empty trap table is not a clean bill of health.</b> With no wrong answers recorded it cannot tell you whether
-       the prior-period figures printed alongside the current ones are being taken by mistake — only that nobody has
-       taken one yet. This table earns its keep on the first wrong reading, not before.`;
+    ? `<b>These are the mistakes a checker cannot catch.</b> Every wrong value here is really printed on the page, usually
+       left over from the period before, so it survives any check against the document — only a second reading finds it.
+       Where software goes wrong more often than people, that field keeps a person whatever its rate says.`
+    : `<b>An empty table is not a clean bill of health.</b> All it means is that nobody has picked up last period's number
+       by mistake yet — not that nobody will.`;
 
   const gridSoWhat = s.human_n
-    ? `<b>These counts are sample size, not score.</b> No field can be licensed on fewer than ${s.n_min} clean human
-       readings, so the gap between ${s.human_n} and that threshold is the price of deciding
-       the fields still open. Median time is how long one paid reading takes; the model runs are the same work with that
-       time and that fee removed.`
-    : `<b>Nothing here is a measurement yet.</b> With no paid human readings on the board these tiles show only what the
-       fixtures contain, and the first real wave is what turns them into evidence — ${s.n_min} clean readings per field
-       before any of them can license anything.`;
+    ? `<b>These are counts, not scores.</b> Nothing goes to software on fewer than ${s.n_min} perfect readings by people,
+       so the gap between ${s.human_n} and that number is what the open questions still cost to settle. The software does
+       the same work without the time or the fee.`
+    : `<b>Nothing here is measured yet.</b> With no paid readings in, these tiles show only demo data. The first wave is
+       what turns them into evidence — ${s.n_min} perfect readings each.`;
 
   const body = `
 <h1>Which parts of the job still need a person?</h1>
 <p class="lede">${headline}</p>
-<p class="sub">We ask every reader for the same eight things from a compliance certificate. Some of the
-eight turn out to be easy and some are genuinely hard, so we track them <b>one at a time</b> rather than as a
-single score — the goal is to stop paying a person for the ones that are safe, and keep paying for the ones
-that are not. A field only comes off the human queue once the evidence is strong enough to defend, not once
-it merely looks good.</p>
+<p class="sub">Everyone who reads a certificate, person or software, is asked for the same eight things. Some are
+easy and some are genuinely hard, so we score them <b>one at a time</b>: stop paying a person for the safe ones,
+keep paying for the rest.</p>
 
 <div class="banner ${s.evidence_mode === "live" ? "live" : "syn"}">
   ${
     s.evidence_mode === "live"
       ? `LIVE — every number below comes from people we paid through Terac today.`
-      : `NOTHING MEASURED YET — no paid reading has arrived, so none of this is a real finding.`
+      : `NOTHING MEASURED YET — nobody we paid has read anything, so none of this is a real finding.`
   }
 </div>
 
 <div class="grid">
-  <div><label>Human extractions</label><div class="big">${s.human_n}</div></div>
-  <div><label>Model runs</label><div class="big">${s.model_n}</div></div>
-  <div><label>Median human time</label><div class="big">${s.median_seconds ? s.median_seconds + "s" : "—"}</div></div>
-  <div><label>Support auto-answered</label><div class="big">${s.support.auto ?? 0}<small>/${s.support.total ?? 0}</small></div></div>
+  <div><label>Readings by people</label><div class="big">${s.human_n}</div></div>
+  <div><label>Readings by software</label><div class="big">${s.model_n}</div></div>
+  <div><label>How long a person takes</label><div class="big">${s.median_seconds ? s.median_seconds + "s" : "—"}</div></div>
+  <div><label>Questions answered automatically</label><div class="big">${s.support.auto ?? 0}<small>/${s.support.total ?? 0}</small></div></div>
 </div>
 <p class="sowhat">${gridSoWhat}</p>
 
 <h2>The eight things we ask for</h2>
 <div class="card"><table>
-<thead><tr><th>What we ask for</th><th class="num">People got it right</th><th class="num">Rate</th><th class="num">Range we can defend</th><th>Can it run without a person?</th><th>Models</th></tr></thead>
+<thead><tr><th>What we ask for</th><th class="num">People got it right</th><th class="num">Rate</th><th class="num">Range we can defend</th><th>Can it run without a person?</th><th>Software</th></tr></thead>
 <tbody>${fieldRows}</tbody>
 </table></div>
-<p class="sowhat"><b>The verdict column is the buy decision, and the interval is what earns it.</b> A field is licensed only
-when the Wilson lower bound clears ${(s.floor * 100).toFixed(0)}% — which takes at least ${s.n_min} perfectly correct
-readings, so below that a wave can rule a field out cheaply but can never turn one on. Read the interval, not the rate:
-LICENSED fields come off the human queue, RULED OUT fields stay on it, and ${
+<p class="sowhat"><b>Read the range, not the rate.</b> Something is only safe to automate once the bottom of its range
+(the Wilson 95% lower bound) clears ${(s.floor * 100).toFixed(0)}% — which takes at least ${s.n_min} perfectly correct
+readings, so below that a wave can rule something out cheaply but can never turn one on. ${
     open
-      ? `the ${open} still open ${open === 1 ? "is" : "are"} where the next wave's budget belongs`
-      : `with none left undecided another wave buys no new licences`
+      ? `The ${open} still undecided ${open === 1 ? "is" : "are"} where the next wave's money belongs`
+      : `With nothing undecided, another wave buys nothing new`
   }.</p>
 
 <h2>Where readers go wrong, and why</h2>
 <div class="card"><table>
-<thead><tr><th>Field</th><th class="num">Humans</th><th class="num">Models</th><th>Why it is the plausible wrong answer</th></tr></thead>
+<thead><tr><th>What we ask for</th><th class="num">People</th><th class="num">Software</th><th>The wrong value the page invites</th></tr></thead>
 <tbody>${trapRows}</tbody>
 </table></div>
 <p class="sowhat">${trapSoWhat}</p>
 
 <h2>Documents</h2>
-<p class="sub">Synthetic demonstration certificates. No real company, person, or account appears in any of them.</p>
+<p class="sub">Made-up certificates. No real company, person, or account appears in any of them.</p>
 <div class="card"><table>
-<thead><tr><th>Certificate</th><th>Entity</th><th>Primary ratio</th><th class="num">Extractions</th></tr></thead>
+<thead><tr><th>Certificate</th><th>Company</th><th>Main ratio</th><th class="num">Readings</th></tr></thead>
 <tbody>${s.certs.map((c) => `<tr><td><a href="/docs/${c.id === "abpa" ? "abpa-demo-compliance-certificate-2026-06-30" : c.id === "hs1" ? "hs1-demo-compliance-certificate-2026-03-31" : "lgw-demo-compliance-certificate-2026-03-31"}.pdf">${c.id.toUpperCase()}</a></td><td>${c.entity}</td><td>${c.ratio}</td><td class="num">${c.answered}</td></tr>`).join("")}</tbody>
 </table></div>
-<p class="sowhat"><b>Extractions per certificate is the reach of the claim, not a corpus size.</b> Every verdict above rests on
-these ${s.certs.length} synthetic documents and one instruction, so a licence here is a licence for this layout — a certificate that
-prints its schedules differently starts the count again at zero. A row still on nought is a document the board says
+<p class="sowhat"><b>Readings per certificate is how far the claim reaches.</b> Everything above rests on
+these ${s.certs.length} made-up documents and one instruction, so what is safe here is safe for this layout — a certificate that
+prints its schedules differently starts the count again at zero. A row still on nought is a document this page says
 nothing about.</p>`;
 
   return page({
-    title: "Coverage Engine",
+    title: "Readiness",
     current: "/readiness",
     body,
     extraCss: `.tag{white-space:nowrap}td .chip{margin:0 4px 3px 0}`,

@@ -128,18 +128,18 @@ display:flex;min-height:100vh;align-items:center;justify-content:center;padding:
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:32px;max-width:520px}
 h1{font-size:25px;margin:0 0 10px}p{color:var(--mut);font-size:15px}code{font-size:13px}
 a{color:var(--acc)}</style></head><body><div class="card">
-<h1>Thank you — that's recorded.</h1>
-<p>Your reading has been scored against what the certificate actually prints, and it now sits
-alongside the model runs on the same document.</p>
+<h1>Thank you — that's saved.</h1>
+<p>We have checked your answers against what the certificate prints. Software read the same
+document, so now we can compare the two.</p>
 <p>Your reference is <strong><code>${ref.replace(/[^\w-]/g, "")}</code></strong>.</p>
-<p><a href="/results">See how you did against the models &rarr;</a> &nbsp;·&nbsp;
+<p><a href="/results">See how you did against the software &rarr;</a> &nbsp;·&nbsp;
 <a href="/expert">Read another certificate</a></p>
 </div></body></html>`);
   });
 
   app.get("/x/:wave", async (req, res) => {
     const sid = req.query.teracSubmissionId ?? req.query.submissionId;
-    if (!sid) return res.status(400).send("This link is missing its Terac submission id.");
+    if (!sid) return res.status(400).send("This link is incomplete. Please open the task again from the link you were sent.");
     // Terac mints the submission id, so hashing it cannot produce a URL pinned to one
     // certificate. An explicit ?cert= does, which is what three separate Terac opportunities
     // need. An absent or unknown value falls back to the hash, so every existing link and
@@ -251,7 +251,7 @@ alongside the model runs on the same document.</p>
       res.status(201).json({ ok: true, redirect: url });
     } catch (err) {
       console.error("extract capture failed:", err.message);
-      res.status(500).json({ error: "could not record your answers" });
+      res.status(500).json({ error: "We could not save your answers. Please try again." });
     }
   });
 }
@@ -262,7 +262,7 @@ function extractPage({ cert, submissionId, taskId, wave, ref, test = false }) {
     (_, i) => `/docs/png/${cert.file}-${i + 1}.png`,
   );
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Read this certificate and report what it states</title><style>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Read this certificate and type what it says</title><style>
 :root{color-scheme:light dark;--bg:#fbfaf8;--fg:#18181b;--mut:#6b7280;--line:#e4e4e7;--card:#fff;--acc:#1d4ed8}
 @media(prefers-color-scheme:dark){:root{--bg:#0c0c0d;--fg:#f4f4f5;--mut:#a1a1aa;--line:#27272a;--card:#161617;--acc:#60a5fa}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -308,16 +308,16 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
 .warn{background:#fef3c7;color:#78350f;border-radius:8px;padding:10px 12px;font-size:13px;margin:14px 0}
 @media(prefers-color-scheme:dark){.warn{background:#3f2d0a;color:#fde68a}}
 </style></head><body><div class="wrap">
-<h1>Read this compliance certificate and report eight things it states</h1>
-<p class="sub">A ${cert.pages}-page compliance certificate is on the left — click it to zoom in. All eight answers are printed in it, so nothing has to be worked out. Most people take 7 to 9 minutes, and there is no time limit.</p>
+<h1>Read this certificate and type out eight things it says</h1>
+<p class="sub">The ${cert.pages}-page certificate is on the left — click it to zoom in. Every answer is printed on it, so nothing needs working out. Most people take 7 to 9 minutes. No time limit.</p>
 ${
   test
     ? `<div style="border:2px solid #b45309;color:#b45309;border-radius:10px;padding:12px 14px;margin:0 0 18px;font-size:14px;font-weight:600">
-    TEST READING — not paid panel evidence. This is recorded as wave <code>${TEST_WAVE}</code> under
-    reference <code>${submissionId}</code> and is excluded from the expert results.</div>`
+    TEST RUN — not paid, and left out of the results. Saved under
+    reference <code>${submissionId}</code> as <code>${TEST_WAVE}</code>.</div>`
     : ""
 }
-<p class="smallscreen">The print on this document is small. If you can, open this task on a laptop or desktop — it will be much easier to read.</p>
+<p class="smallscreen">The print is small. Open this on a laptop if you can — it is much easier to read.</p>
 <div class="cols">
   <div class="doc">
     <div class="bar">
@@ -346,7 +346,7 @@ ${
     <div class="warn">${INSTRUCTION.split("\n\n").pop().replace(/\n/g, " ").replace('"not stated"', "<strong>not stated</strong>")}</div>
     <a class="ask" href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}">
       Text us a question
-      <span>Something unclear or looks wrong? We reply. Your reference ${ref} is filled in for you.</span>
+      <span>Not sure about something? We reply. Your reference ${ref} is filled in already.</span>
     </a>
     ${FIELDS.map((f) =>
       f.key === "compliant"
@@ -356,8 +356,8 @@ ${
            <input name="${f.key}" required autocomplete="off">`,
     ).join("")}
     <button type="submit">Submit my answers</button>
-    <p class="note">Stuck or something looks wrong? Text <a href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}"><strong>${supportNumber()}</strong></a> and we will reply. Your reference is <strong>${ref}</strong> — please include it so we know which task you are on. Answering &quot;not stated&quot; is fine when the document does not print something.</p>
-    <p class="note">Your answers are recorded against this task only. The document is a synthetic example created for testing and describes no real company.</p>
+    <p class="note">Stuck? Text <a href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}"><strong>${supportNumber()}</strong></a> and we will reply. Include your reference <strong>${ref}</strong> so we know which task you are on.</p>
+    <p class="note">Your answers are saved against this task only. The certificate is made up for testing — no real company.</p>
   </form>
 </div>
 <script>

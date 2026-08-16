@@ -552,10 +552,10 @@ details .inner{padding:0 16px 16px}
         ? "what a reading actually cost, this wave"
         : waste === 0
           ? `exactly list — nothing paid for went undelivered`
-          : `${money(waste)} above the ${money(listCpi)} list price — that gap is non-delivery`
+          : `${money(waste)} over the ${money(listCpi)} list price — that gap is people who never delivered`
     }</div></div>
-  <div><label>Fields decided</label><div class="big">${decidable}<span style="font-size:15px;color:var(--mut)">/${s.corpus.length}</span></div>
-    <div class="k">${need} clean readings needed per field</div></div>
+  <div><label>Documents decided</label><div class="big">${decidable}<span style="font-size:15px;color:var(--mut)">/${s.corpus.length}</span></div>
+    <div class="k">${need} clean answers needed to decide one</div></div>
 </div>
 
 <div class="mini">
@@ -574,9 +574,9 @@ details .inner{padding:0 16px 16px}
   <div><div class="n">${delivered}</div><div class="l">Gave us answers</div>
     <div class="s">${arrived - delivered > 0 ? `${arrived - delivered} started and quit` : "everyone who opened it finished"}</div></div>
 </div>
-<p class="sowhat">The first two boxes are <b>Terac's numbers</b>, read from Terac when this page loaded.
-The last two are ours, and only we can see them — Terac knows it sent people, but not whether they ever
-reached the document. <b>When those two halves disagree, the gap is what we paid for and did not get.</b></p>
+<p class="sowhat">The first two boxes are Terac's numbers; the last two are ours. Terac knows it sent
+people, not whether they reached the document. <b>When the two halves disagree, the gap is what we paid
+for and did not get.</b></p>
 
 <h2>Needs you</h2>
 ${
@@ -592,7 +592,7 @@ ${
       cert
         ? `<img src="/docs/png/${cert.file}-1.png" alt="${cert.entity}">
            <div class="padcap">${cert.entity}<br><span>${cert.pages} pages · ${cert.truth.ratio_name}</span></div>`
-        : `<div class="padcap">document assigned by hash</div>`
+        : `<div class="padcap">we pick a document for each reader</div>`
     }
   </div>
   <div class="padbody">
@@ -634,14 +634,14 @@ ${
 ${
   live
     ? `<div class="act on"><div class="t"><b>Recruiting now</b>
-    ${live.participants} participants · ${money(live.cost_cents) ?? ""} · <code>${live.wave}</code></div>
+    ${live.participants} readers · ${money(live.cost_cents) ?? ""} · <code>${live.wave}</code></div>
     <button class="danger" onclick="stopIt('${live.id}')">Stop</button></div>`
     : ""
 }
 ${
   stale.length
     ? `<div class="act"><div class="t"><b>${stale.length} draft${stale.length > 1 ? "s" : ""} cannot be launched</b>
-    Built against a host we no longer serve — they would send readers to a dead address.
+    Built for a web address we no longer use — they would send readers to a dead link.
     ${stale.map((o) => `<code>${o.wave}</code>`).join(" ")}</div></div>`
     : ""
 }
@@ -670,7 +670,7 @@ ${
     <td><code>${w.wave}</code>${
       w.terac_title ? `<div class="dim" style="font-size:11.5px">${w.terac_title}</div>` : ""
     }</td>
-    <td>${cert ? cert.entity : '<span class="dim">assigned by hash</span>'}</td>
+    <td>${cert ? cert.entity : '<span class="dim">one picked per reader</span>'}</td>
     <td><span class="tag ${say[1]}">${say[0]}</span></td>
     <td class="num">${w.participants ?? "—"}</td>
     <td class="num">${w.delivered ?? 0}</td>
@@ -682,16 +682,16 @@ ${
     : `<tr><td colspan="7" class="dim">No wave has been launched yet.</td></tr>`
 }
 </tbody></table></div>
-<p class="sowhat">State comes from Terac on every page load, not from our own record — ours is written at
-launch and never updated, so it went on saying "recruiting" for a wave that had already finished.
-<b>A wave that is done recruiting cannot be stopped and does not need to be</b>; the money was committed
-when it started, and what it bought is the Delivered column.</p>
+<p class="sowhat">State comes from Terac on every page load. Our own record is written at launch and
+never updated, so it went on saying "recruiting" for a wave that had already finished. <b>A wave that
+is done recruiting cannot be stopped and does not need to be</b> — the money went when it started, and
+what it bought is the Delivered column.</p>
 </div>
 
 <h2>Can we stop paying humans to read this?</h2>
 <div class="card"><div class="tbl"><table>
 <thead><tr><th>Certificate</th><th class="num">People who read it</th><th class="num">Answers right</th>
-<th>Can it run unattended?</th><th>Human attestation</th></tr></thead>
+<th>Can it run unattended?</th><th>Signed by a person</th></tr></thead>
 <tbody>
 ${s.corpus
   .map(
@@ -702,10 +702,10 @@ ${s.corpus
     c.judgments ? `${c.rated_claims} × ${c.claims} fields` : "—"
   }</div></td>
   <td><span class="tag ${tone(c.label)}">${verdict(c.label)}</span>${
-    c.judgments ? `<div class="dim" style="font-size:11.5px;margin-top:4px">confidence floor ${c.theta.toFixed(2)}, needs ${(s.floor).toFixed(2)}</div>` : ""
+    c.judgments ? `<div class="dim" style="font-size:11.5px;margin-top:4px">worst case ${c.theta.toFixed(2)}, needs ${(s.floor).toFixed(2)}</div>` : ""
   }</td>
   <td><span class="tag ${c.evidence_mode === "live" ? "ok" : "dim"}">${
-    c.evidence_mode === "live" ? "ATTESTED" : "NONE YET"
+    c.evidence_mode === "live" ? "Signed" : "Not yet"
   }</span></td>
 </tr>`,
   )
@@ -713,15 +713,15 @@ ${s.corpus
 </tbody>
 </table></div></div>
 
-<h2>Dispatch a wave</h2>
+<h2>Set up a new wave</h2>
 <div class="card">
   <div class="row">
-    <div><label>Participants</label><input id="participants" type="number" value="5" min="1" max="1000"></div>
-    <div><label>Minutes</label><input id="minutes" type="number" value="10" min="1"></div>
-    <div><label>Window (days)</label><input id="days" type="number" value="5" min="5"></div>
+    <div><label>Readers</label><input id="participants" type="number" value="5" min="1" max="1000"></div>
+    <div><label>Minutes each</label><input id="minutes" type="number" value="10" min="1"></div>
+    <div><label>Days to fill</label><input id="days" type="number" value="5" min="5"></div>
     <div><label>Certificate</label><select id="certId">
       ${CERTS.map((c) => `<option value="${c.id}">${c.id} — ${c.pages}pp</option>`).join("")}
-      <option value="">any (assigned by hash)</option>
+      <option value="">any (we pick one)</option>
     </select></div>
     <button class="ghost" onclick="draftIt()">Build draft</button>
     <div><label>Price check</label><input id="f_count" type="number" value="10" min="1"></div>
@@ -734,38 +734,34 @@ ${s.corpus
 <details>
   <summary>How to read this page</summary>
   <div class="inner">
-    <p class="sowhat">The certificate table answers one question: can this document be read
-    unattended. <b>Only two answers change what you do</b> — "Safe to automate" means stop paying
-    people to read it, "Keep a human on it" means stop trying. "Not enough evidence yet" is not a
-    complaint about the readers; it means the interval still straddles the floor and you have not
-    bought enough evidence to decide either way.</p>
-    <p class="sowhat">"People who read it" counts human readings bought through Terac — no model runs
-    are in that table. "Answers right" counts the individual field answers inside those readings,
-    which is why its denominator is larger. <b>The confidence floor is deliberately harsher than the
-    raw score</b>: it is the bottom of a 95% interval, so a handful of perfect readings still lands
-    short of the bar, which is the point. Treat it as an upper bound on our certainty rather than a
-    grade, since those field answers come from the same few people and are not fully independent.</p>
-    <p class="sowhat">A field needs <b>${need} independent clean readings</b> before even perfect
-    agreement can license it, which is why judgments rather than participants are what buy readiness.</p>
-    <p class="sowhat"><b>Launch is the only control here that spends money</b>, and stopping later
-    does not refund readings already claimed. The price on a draft is Terac's autonomous estimate, not
-    the charge — the settled figure is only readable after launch, and the two have differed by 8×.</p>
-    <p class="sowhat">Per usable reading is this wave's spend divided by the readings that actually
-    arrived from it. <b>When it runs above that wave's own list price, the gap is recruitment that
-    returned nothing</b> — a funnel problem, not a pricing one. It is deliberately never blended
-    across waves: these have been priced sevenfold apart, and an all-time average of that compares
-    nothing to nothing.</p>
+    <p class="sowhat">The certificate table answers one question: can this document be read without a
+    person. <b>Only two answers change what you do</b> — "Safe to automate" means stop paying people to
+    read it, "Keep a human on it" means stop trying. "Not enough evidence yet" is not a complaint about
+    the readers; we have not bought enough readings to call it either way.</p>
+    <p class="sowhat">"People who read it" counts human readings bought through Terac — no software runs
+    are in that table. "Answers right" counts the eight answers inside each of those readings, which is
+    why its denominator is larger. <b>Worst case is harsher than the raw score on purpose</b>: it is the
+    Wilson 95% lower bound, so a handful of perfect readings still lands short of the bar. Nothing gets
+    decided until <b>${need} answers</b> come back clean — below that, even a perfect score cannot clear
+    the bar. Treat it as the most we can claim, not a grade: those answers come from the same few people
+    and are not fully independent.</p>
+    <p class="sowhat"><b>Launch is the only control here that spends money</b>, and stopping later does
+    not refund readings already taken. A draft price is Terac's own guess, not the charge — the real
+    figure only shows after launch, and the two have differed by 8×.</p>
+    <p class="sowhat">Per usable reading is this wave's spend divided by the readings it returned.
+    <b>Above that wave's own list price, the gap is recruitment that returned nothing</b> — a funnel
+    problem, not a pricing one. We never average it across waves: they have been priced sevenfold
+    apart.</p>
     <p class="sowhat">Across every wave ever launched: ${money(committed)} committed for ${deliveredAll}
-    readings — including waves that were stopped and refunded, so read it as a history rather than a
-    rate. <b>Each wave's own numbers are in the Waves table</b>, which is the only place they mean
-    anything.</p>
+    readings — including waves that were stopped and refunded, so read that as history, not a rate.
+    <b>Each wave's own numbers are in the Waves table</b>, the only place they mean anything.</p>
   </div>
 </details>
 
 <details>
-  <summary>Wave ledger</summary>
+  <summary>Every draft and wave</summary>
   <div class="inner"><div class="tbl"><table>
-  <thead><tr><th>Wave</th><th>Status</th><th class="num">Participants</th>
+  <thead><tr><th>Wave</th><th>Status</th><th class="num">Readers</th>
   <th class="num">Cost</th><th class="num">Created</th></tr></thead>
   <tbody>
   ${
@@ -793,7 +789,7 @@ async function draftIt(){
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
 async function feas(){
-  out("feasout","requesting human pricing…");
+  out("feasout","asking Terac to price it…");
   const[,j]=await post("/api/ops/feasibility",{count:+f_count.value}); out("feasout",j);
 }
 async function launchIt(id){

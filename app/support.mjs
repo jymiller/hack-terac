@@ -293,7 +293,7 @@ function supportPage(s) {
     <td class="t">${new Date(m.received_at).toLocaleTimeString()}</td>
     <td><code>${esc(m.from_number)}</code></td>
     <td class="msg">${esc(m.body)}</td>
-    <td>${m.answered ? `<span class="tag ok">auto · ${esc(m.matched)}</span>` : m.escalated ? `<span class="tag warn">escalated</span>` : `<span class="dim">—</span>`}</td>
+    <td>${m.answered ? `<span class="tag ok">auto · ${esc(m.matched)}</span>` : m.escalated ? `<span class="tag warn">sent to a person</span>` : `<span class="dim">—</span>`}</td>
     <td class="act">${
       m.resolved
         ? '<span class="ok">replied</span>'
@@ -303,7 +303,7 @@ function supportPage(s) {
     }</td></tr>`,
         )
         .join("")
-    : `<tr><td colspan="5" class="mut">No worker messages yet. Text ${supportNumber()} to try it.</td></tr>`;
+    : `<tr><td colspan="5" class="mut">No messages yet. Text ${supportNumber()} to try it.</td></tr>`;
 
   const tableSoWhat = s.messages.length
     ? `<p class="sowhat">The Handling column is the split that matters: <b>every “escalated” row is a question that cost a human their attention</b>, and every “auto” row is one that cost nothing because the answer was already written down. A row still offering Reply is a paid participant sitting idle — at roughly $1.69 a reading, a stalled worker is worth more than the minute it takes to answer. When the same question escalates twice, that is a missing FAQ entry, not a careless worker.</p>`
@@ -320,8 +320,7 @@ function supportPage(s) {
   <div class="deskmain">
     <label>Readers text this number</label>
     <a class="glow" href="sms:${num}">${pretty}</a>
-    <p class="deskline">Answered automatically when we already have the answer written down.
-    Anything else reaches a person.</p>
+    <p class="deskline">We text back answers we already have. Everything else reaches a person.</p>
   </div>
   <div class="deskqr">
     <img src="/api/support/qr.png" alt="Scan to text support" width="150" height="150">
@@ -344,11 +343,11 @@ function supportPage(s) {
 <details>
   <summary>How this works</summary>
   <div class="inner">
-    <p class="sowhat">Answers are matched to written-down replies rather than generated. These are
-    promises to someone being paid, and <b>a confident wrong answer about payment or eligibility is
-    worse than silence</b> — so anything not already answered goes to a person instead of being guessed.</p>
-    <p class="sowhat">Every escalation is a question that cost someone their attention. <b>The same
-    question escalating twice is a missing answer, not a careless reader.</b></p>
+    <p class="sowhat">Replies come off a written list, not from a model. These are promises to
+    someone being paid, and <b>a confident wrong answer about pay is worse than silence</b> — so
+    anything we have not already answered goes to a person.</p>
+    <p class="sowhat">Every question that reaches a person costs someone their attention. <b>The
+    same one twice means we never wrote the answer down</b> — that is on us, not the reader.</p>
   </div>
 </details>
 `;

@@ -136,7 +136,7 @@ export async function resultsState() {
 }
 
 const pct = (x) => (x == null ? "—" : (x * 100).toFixed(0) + "%");
-const short = (w) => w.replace(/^novita\//, "").replace(/^meta-llama\//, "").replace(/^qwen\//, "").replace(/^google\//, "");
+const short = (w) => w.replace(/^novita\//, "").replace(/^meta-llama\//, "").replace(/^qwen\//, "").replace(/^google\//, "").replace(/^human$/, "people").replace(/^walkup$/, "unpaid readers");
 
 /** Green through amber to red, so a row of cells reads as a shape before it reads as numbers. */
 function heat(rate) {
@@ -167,6 +167,14 @@ const EXTRA_CSS = `
 
 const VERDICT_TONE = { LICENSED: "ok", "RULED OUT": "bad", "NOT YET": "warn", UNMEASURED: "dim" };
 
+/** The internal labels are the statistics talking. A reader needs the decision. */
+const VERDICT_SAYS = {
+  LICENSED: "Safe to automate",
+  "RULED OUT": "Keep a person on it",
+  "NOT YET": "Not enough evidence yet",
+  UNMEASURED: "Nobody has read it",
+};
+
 
 export function resultsPage(s) {
   const topHuman = s.humans[0];
@@ -176,10 +184,10 @@ export function resultsPage(s) {
     !s.entrants.length
       ? "Nobody has read a certificate yet."
       : topHuman && topModel
-        ? `${short(topHuman.who)} read at ${pct(topHuman.rate)}. The best model, ${short(topModel.who)}, read at ${pct(topModel.rate)}.`
+        ? `People read at ${pct(topHuman.rate)}. The best software, ${short(topModel.who)}, read at ${pct(topModel.rate)}.`
         : topHuman
-          ? `${s.humans.length} human run${s.humans.length === 1 ? "" : "s"} at ${pct(topHuman.rate)}. No model has run yet.`
-          : `${s.models.length} model runs. No human has read these documents yet.`;
+          ? `${s.humans.length} paid run${s.humans.length === 1 ? "" : "s"} at ${pct(topHuman.rate)}. No software has run yet.`
+          : `${s.models.length} software runs. No human has read these documents yet.`;
 
   const rows = s.entrants
     .map((e) => {
@@ -187,8 +195,9 @@ export function resultsPage(s) {
       // Three populations, not two. A walk-up is a real reading but was never recruited or
       // paid, so it must never be mistaken for panel evidence — or for a model.
       const tone = e.source === "human" ? "hum" : e.source === "model" ? "mod" : "wlk";
-      const badge = e.source === "human" ? "PAID PANEL" : e.source === "model" ? "MODEL" : "WALK-UP";
-      const name = e.source === "walkup" ? "unpaid readers (incl. QA)" : short(e.who);
+      const badge = e.source === "human" ? "PAID" : e.source === "model" ? "SOFTWARE" : "UNPAID";
+      const name =
+        e.source === "human" ? "people" : e.source === "walkup" ? "readers, including our own tests" : short(e.who);
       return `<tr>
       <td><span class="badge ${tone}">${badge}</span> <strong>${name}</strong></td>
       <td class="num">${e.runs}</td>
@@ -200,7 +209,7 @@ export function resultsPage(s) {
       <td class="num">${e.med_seconds ? e.med_seconds + "s" : "—"}</td>
       <td class="num">${e.cost_cents ? "$" + (e.cost_cents / 100).toFixed(2) : "≈$0"}</td>
       <td class="num">${e.traps.length ? `<span class="bad">${e.traps.length}</span>` : "—"}</td>
-      <td><span class="tag ${VERDICT_TONE[e.verdict]}">${e.verdict}</span></td>
+      <td><span class="tag ${VERDICT_TONE[e.verdict]}">${VERDICT_SAYS[e.verdict]}</span></td>
     </tr>`;
     })
     .join("");
@@ -231,49 +240,45 @@ export function resultsPage(s) {
   const cpi = "$" + (s.cpi_cents / 100).toFixed(2);
 
   const body = `
-<h1>Same documents. Nearly the same instruction.</h1>
+<h1>Same documents. Almost the same instructions.</h1>
 <p class="lede">${lede}</p>
-<p class="sub">Every reader below saw the identical rendered pages — each run records the content hash of
-the images it was shown, so "same documents" is checkable on the <a href="/log">run log</a> rather than
-asserted — and answered the identical eight questions, scored by one function against ground truth the
-documents themselves print. One difference is real and worth saying out loud: a model is additionally
-given a JSON reply format that no human is ever shown. Nothing was extracted in advance for anyone.</p>
+<p class="sub">Everyone below saw the same pages and answered the same eight questions, marked the same
+way against what the documents print. The <a href="/log">run log</a> records the images each reader was
+shown, so "same documents" can be checked rather than taken on trust. One difference: the software is
+also told what shape to write its answer in, which no person is ever shown.</p>
 
-<h2>Where the evidence stands</h2>
+<h2>Where things stand</h2>
 <div class="grid">
-  <div><label>Licensed</label><div class="big ok">${licensed}</div></div>
+  <div><label>Safe to automate</label><div class="big ok">${licensed}</div></div>
   <div><label>Ruled out</label><div class="big bad">${ruledOut}</div></div>
   <div><label>Still undecided</label><div class="big warn">${undecided}</div></div>
-  <div><label>Human reading</label><div class="big">${cpi} <small>per certificate</small></div></div>
+  <div><label>What a person costs</label><div class="big">${cpi} <small>per certificate</small></div></div>
 </div>
-<p class="sowhat"><b>Only the licensed count is spendable.</b> A reader is licensed when the bottom of its
-95% interval clears the ${pct(s.floor)} floor, which is the bar for letting it read a field unattended;
-ruled out is settled just as firmly and costs far less to reach. Every reader still undecided is an
-unpaid bill — roughly 35 clean readings apiece before an interval is tight enough to decide — and at
-${cpi} a reading, that bill is the number to budget against.</p>
+<p class="sowhat"><b>Only the first number saves money.</b> A reader is safe to automate when the bottom
+of its 95% range — the Wilson 95% lower bound — clears ${pct(s.floor)}. Ruling one out is just as firm
+and far cheaper to reach. Everyone still undecided needs about 35 clean readings before we can decide,
+at ${cpi} each; that is the bill to budget for.</p>
 
 <h2>Every reader, scored the same way</h2>
 <div class="card">${
     s.entrants.length
-      ? `<div class="heat"><table><tr><th>Reader</th><th class="num">Docs</th><th class="num">Fields</th><th>Accuracy · 95% interval</th><th class="num">Median</th><th class="num">Cost</th><th class="num">Traps</th><th>Verdict</th></tr>${rows}</table></div>
-    <p class="sowhat"><b>The interval decides, not the rate.</b> A reader sitting above ${pct(s.floor)} on
-    a handful of documents has proved nothing yet; the verdict only moves when the whole interval clears
-    the floor or falls below it. Cost is what those answers took to obtain — ${cpi} per certificate for a
-    recruited human against effectively nothing for an API call — so the asymmetry to trade on is that
-    ruling a reader out is cheap and licensing one is the expensive half.</p>`
+      ? `<div class="heat"><table><tr><th>Reader</th><th class="num">Docs read</th><th class="num">Answers right</th><th>Accuracy · range we can defend</th><th class="num">Typical time</th><th class="num">Cost</th><th class="num">Traps</th><th>Decision</th></tr>${rows}</table></div>
+    <p class="sowhat"><b>The range decides, not the score.</b> A reader above ${pct(s.floor)} on a handful
+    of documents has proved nothing; the decision only moves when the whole range clears the floor or
+    falls below it. A person costs ${cpi} a certificate and software costs almost nothing — which is why
+    ruling a reader out is cheap and clearing one is the expensive half.</p>`
       : `<div class="empty">No runs yet.</div>`
   }</div>
 
-<h2>Field by field</h2>
+<h2>The eight things we ask for</h2>
 <div class="card">${
     s.entrants.length
       ? `<div class="heat"><table>
     <tr><th></th>${whos.map((w) => `<th class="hd">${short(w)}</th>`).join("")}</tr>${grid}</table></div>
-    <p class="sowhat"><b>A pale row is a field you keep a human on; a pale column is only a reader you
-    drop.</b> The field is the unit of the decision, so a row that stays pale straight across is work no
-    model on the list can take, no matter which one you buy — while a single pale column is a purchasing
-    mistake and nothing more. Cells show correct over attempted, and anything short of 35 readings is a
-    hint about where to spend next, not a licence.</p>`
+    <p class="sowhat"><b>A pale row is work you keep a person on. A pale column is only a reader you
+    drop.</b> A row that stays pale all the way across is work no software here can take, whichever one
+    you buy; one pale column is a bad purchase and nothing more. Cells show right out of tried, and
+    under 35 readings is a hint about where to spend next, not a decision.</p>`
       : `<div class="empty">Nothing to compare yet.</div>`
   }</div>
 
@@ -288,12 +293,12 @@ ${cpi} a reading, that bill is the number to budget against.</p>
               }</strong><br><span class="mut">${t.why}</span></div>`,
           )
           .join("")
-      : `<div class="empty">No reader has taken a distractor yet.</div>`
+      : `<div class="empty">Nobody has taken one yet.</div>`
   }
-  <p class="sowhat"><b>Every line here is a wrong answer that a citation check would pass.</b> The
-  distractor is the prior period's figure, printed on the same page as the right one, so asking the
-  reader to quote its source — or asking a second model to verify it — cannot separate them. Where these
-  cluster is where review has to stay human even if the accuracy column looks fine.</p>
+  <p class="sowhat"><b>Every line here is a wrong answer that a source check would pass.</b> The wrong
+  value is last period's figure, printed on the same page as the right one, so asking the reader to say
+  where it got it — or asking other software to check it — cannot tell the two apart. Where these
+  cluster, a person stays on the job even if the accuracy looks fine.</p>
 </div>`;
 
   return page({
