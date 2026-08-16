@@ -32,10 +32,18 @@ export async function boardState() {
   const distractors = {};
   let humanN = 0;
   let modelN = 0;
+  let walkupN = 0;
   const durations = [];
 
   for (const r of rowsRes.rows) {
     const isHuman = r.source === "human";
+    // A walk-up is neither. It is real reading, but it was not recruited or paid, so it
+    // cannot enter the licensing bound; and `else` alone would file it under models —
+    // where model_id is null, so it surfaced as a phantom model literally named "human".
+    if (r.source !== "human" && r.source !== "model") {
+      walkupN++;
+      continue;
+    }
     if (isHuman) {
       humanN++;
       if (r.duration_ms) durations.push(Number(r.duration_ms));
@@ -80,6 +88,7 @@ export async function boardState() {
     distractors: Object.values(distractors).sort((a, b) => b.human + b.model - (a.human + a.model)),
     human_n: humanN,
     model_n: modelN,
+    walkup_n: walkupN,
     median_seconds: durations.length
       ? Math.round(durations.sort((a, b) => a - b)[Math.floor(durations.length / 2)] / 1000)
       : null,

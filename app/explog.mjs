@@ -102,6 +102,9 @@ export async function logRun({
   source,
   provider = null,
   modelId = null,
+  // Distinguishes two readers who saw the identical pixels under the identical instruction.
+  // Null for models, where that combination genuinely is one repeated run.
+  subjectId = null,
   temperature = null,
   certId,
   instruction,
@@ -119,7 +122,15 @@ export async function logRun({
   const imagesSha = images ? sha(images.map((i) => i.sha256 ?? i.file).join("|")) : null;
   // Same model, same prompt, same pixels, same document = the same run. Re-running after a
   // re-render or a prompt edit is a NEW row, which is the point.
-  const runKey = `${source}:${modelId ?? "human"}:${certId}:${promptSha}:${imagesSha ?? "none"}`;
+  //
+  // That identity holds for a model and is false for people: two experts reading the same
+  // pixels under the same instruction are two independent readings, and that independence is
+  // what the Wilson bound on /board is counting. Without a discriminator a whole wave would
+  // collapse to one row per certificate and `do nothing` would drop the rest silently.
+  // subjectId is appended and filtered, so model keys stay byte-identical and still dedupe.
+  const runKey = [source, modelId ?? "human", certId, promptSha, imagesSha ?? "none", subjectId]
+    .filter(Boolean)
+    .join(":");
   const { rows } = await query(
     `insert into experiment_runs
        (run_key, source, provider, model_id, temperature, cert_id,

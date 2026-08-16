@@ -1,6 +1,6 @@
 import express from "express";
 import { query } from "./db.mjs";
-import { CERTS, FIELDS } from "./certs.mjs";
+import { CERTS, FIELDS, byId } from "./certs.mjs";
 const FIELD_COUNT = 8;
 import {
   createOpportunity,
@@ -196,7 +196,12 @@ export function registerOpsRoutes(app) {
     try {
       await ensureSchema();
       const participants = Math.max(1, Math.min(1000, Number(req.body?.participants) || 12));
-      const minutes = Math.max(1, Number(req.body?.minutes) || 3);
+      // Required, not defaulted. A silent default advertises a duration nobody chose, which
+      // is how the last wave came to offer 3 minutes for 7-9 minutes of work.
+      const minutes = Number(req.body?.minutes);
+      if (!Number.isFinite(minutes) || minutes < 1) {
+        throw new Error("minutes is required — pass the real duration of the task, in minutes");
+      }
       const days = Math.max(5, Number(req.body?.days) || 5);
       const claimsPerTask = Math.max(1, Math.min(60, Number(req.body?.claimsPerTask) || 4));
       const feasibilityRequestId = req.body?.feasibilityRequestId || undefined;
@@ -204,7 +209,14 @@ export function registerOpsRoutes(app) {
         throw new Error(`APP_URL must be a public https URL for Terac to reach the task page (currently ${process.env.APP_URL})`);
       }
       const wave = `w${Date.now().toString(36).slice(-4)}`;
-      const taskUrl = `${process.env.APP_URL}/x/${wave}`;
+      // Optional. Pins every reader in this wave to one certificate, so three waves give
+      // three URLs whose responses separate by certificate. Omitted, the task page falls
+      // back to assigning a certificate by hash of Terac's submission id.
+      const certId = req.body?.certId;
+      if (certId && !byId(certId)) throw new Error(`unknown certId ${certId}`);
+      const taskUrl = certId
+        ? `${process.env.APP_URL}/x/${wave}?cert=${certId}`
+        : `${process.env.APP_URL}/x/${wave}`;
 
       let projectId = req.body?.projectId;
       if (!projectId) {
