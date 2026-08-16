@@ -34,7 +34,12 @@ async function humanCpiCents() {
 export async function resultsState() {
   const cpiCents = await humanCpiCents();
   const { rows } = await query(
-    `select source, coalesce(model_id,'human') as who, cert_id, detail, correct, total, duration_ms
+    // `who` must distinguish a paid panellist from a walk-up. Both carry a null model_id, so
+    // coalescing on that alone filed every walk-up — including QA readings written to exercise
+    // the scorer — into the paid-human bucket, and their perfect scores pushed the human
+    // Wilson bound over the 0.90 floor. The page reported LICENSED off test data.
+    `select source, case when source = 'model' then model_id else source end as who,
+            cert_id, detail, correct, total, duration_ms
        from extractions order by received_at`,
   );
 
@@ -118,10 +123,10 @@ function heat(rate) {
 const EXTRA_CSS = `
 .badge{display:inline-block;font-size:9.5px;letter-spacing:.07em;font-weight:600;padding:2px 7px;
   border-radius:99px;border:1px solid currentColor;vertical-align:1px}
-.badge.hum{color:var(--acc)}.badge.mod{color:var(--agent)}
+.badge.hum{color:var(--acc)}.badge.mod{color:var(--agent)}.badge.wlk{color:var(--dim)}
 .rail{height:6px;background:#0a0a0b;border:1px solid var(--line);border-radius:99px;overflow:hidden}
 .fill{height:100%;border-radius:99px}
-.fill.hum{background:var(--acc)}.fill.mod{background:var(--agent)}
+.fill.hum{background:var(--acc)}.fill.mod{background:var(--agent)}.fill.wlk{background:var(--dim)}
 .rt{font-size:11.5px;margin-top:4px;font-variant-numeric:tabular-nums}
 .heat{overflow-x:auto}
 .cell{text-align:center;font-variant-numeric:tabular-nums;font-size:12px;padding:8px 6px;
@@ -152,9 +157,13 @@ export function resultsPage(s) {
   const rows = s.entrants
     .map((e) => {
       const bar = e.rate == null ? 0 : e.rate * 100;
-      const tone = e.source === "human" ? "hum" : "mod";
+      // Three populations, not two. A walk-up is a real reading but was never recruited or
+      // paid, so it must never be mistaken for panel evidence — or for a model.
+      const tone = e.source === "human" ? "hum" : e.source === "model" ? "mod" : "wlk";
+      const badge = e.source === "human" ? "PAID PANEL" : e.source === "model" ? "MODEL" : "WALK-UP";
+      const name = e.source === "walkup" ? "unpaid readers (incl. QA)" : short(e.who);
       return `<tr>
-      <td><span class="badge ${tone}">${e.source === "human" ? "HUMAN" : "MODEL"}</span> <strong>${short(e.who)}</strong></td>
+      <td><span class="badge ${tone}">${badge}</span> <strong>${name}</strong></td>
       <td class="num">${e.runs}</td>
       <td class="num">${e.correct}/${e.total}</td>
       <td style="min-width:170px">
