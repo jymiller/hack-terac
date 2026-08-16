@@ -471,6 +471,16 @@ function opsPage(s) {
 .padnums{display:flex;gap:26px;flex-wrap:wrap}
 .padnums b{display:block;font-size:21px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .padnums span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.stepwrap{margin-top:16px}
+.step{display:flex;align-items:center;gap:0;margin-top:6px}
+.stepbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);width:40px;height:40px;
+  font-size:20px;font-weight:600;line-height:1;cursor:pointer;padding:0;border-radius:9px 0 0 9px}
+.step .stepbtn:last-of-type{border-radius:0 9px 9px 0}
+.stepbtn:hover{border-color:var(--warn);color:var(--warn);filter:none;background:var(--card)}
+.step input{width:70px;height:40px;text-align:center;border-radius:0;border-left:0;border-right:0;
+  font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.steplive{margin-left:14px;font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--warn)}
+.steplive.busy{opacity:.45}
 .padlink{font-size:12px;color:var(--mut);margin:16px 0 0;word-break:break-all}
 .padgo{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px}
 button.go{background:var(--warn);color:#231a02;font-size:16px;font-weight:700;padding:13px 30px;
@@ -601,10 +611,15 @@ ${
         : ""
     }
     <p class="padlink">They will open <a href="${draft.task_url}?teracSubmissionId=preview_pad" target="_blank">${draft.task_url}</a></p>
-    <div class="row" style="margin-top:14px">
-      <div><label>Change the number of readers</label><input id="resize" type="number"
-        value="${draft.participants}" min="1" max="1000"></div>
-      <button class="ghost" onclick="resizeIt('${draft.id}')">Update and reprice</button>
+    <div class="stepwrap">
+      <label>How many readers</label>
+      <div class="step">
+        <button type="button" class="stepbtn" onclick="bump('${draft.id}',-1)" aria-label="One fewer reader">&minus;</button>
+        <input id="resize" type="number" value="${draft.participants}" min="1" max="1000"
+               onchange="bump('${draft.id}',0)" aria-label="Number of readers">
+        <button type="button" class="stepbtn" onclick="bump('${draft.id}',1)" aria-label="One more reader">+</button>
+        <span class="steplive" id="steplive">${money(draft.cost_cents) ?? ""}</span>
+      </div>
     </div>
     <div class="padgo">
       <button class="go" onclick="launchIt('${draft.id}')" ${short ? "disabled" : ""}>GO — start recruiting</button>
@@ -786,10 +801,22 @@ async function launchIt(id){
   const[ok,j]=await post("/api/ops/launch",{opportunityId:id});
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
 }
-async function resizeIt(id){
-  out("draftout","repricing…");
-  const[ok,j]=await post("/api/ops/resize",{opportunityId:id,participants:+resize.value});
-  out("draftout",j); if(ok)setTimeout(()=>location.reload(),700);
+let bumpTimer=null;
+function bump(id,delta){
+  const el=document.getElementById("resize");
+  const n=Math.max(1,Math.min(1000,(+el.value||1)+delta));
+  el.value=n;
+  const live=document.getElementById("steplive");
+  live.classList.add("busy"); live.textContent="pricing…";
+  // Debounced: holding + should reprice once, not once per click.
+  clearTimeout(bumpTimer);
+  bumpTimer=setTimeout(async()=>{
+    const[ok,j]=await post("/api/ops/resize",{opportunityId:id,participants:n});
+    if(ok){ live.classList.remove("busy");
+      live.textContent = j.cost_cents!=null ? "$"+(j.cost_cents/100).toFixed(2) : "";
+      setTimeout(()=>location.reload(),450);
+    } else { live.classList.remove("busy"); live.textContent="could not reprice"; out("draftout",j); }
+  },500);
 }
 async function stopIt(id){
   if(!confirm("Stop recruiting on this wave?")) return;
