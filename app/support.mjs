@@ -269,6 +269,22 @@ export function registerSupportRoutes(app) {
 const esc = (t) =>
   String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 
+const EXTRA_CSS = `
+.desk{display:flex;gap:20px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  background:radial-gradient(120% 140% at 15% 0%,#12202e 0%,var(--card) 60%);
+  border:1px solid var(--line);border-radius:16px;padding:30px 32px}
+.deskmain{flex:1;min-width:280px}
+.glow{display:inline-block;font-size:clamp(30px,5vw,46px);font-weight:700;letter-spacing:-.02em;
+  color:#fff;text-decoration:none;margin:8px 0 4px;
+  text-shadow:0 0 18px rgba(96,165,250,.75),0 0 46px rgba(96,165,250,.35)}
+.glow:hover{text-shadow:0 0 22px rgba(96,165,250,.95),0 0 64px rgba(96,165,250,.5)}
+.deskline{color:var(--mut);font-size:13.5px;margin:8px 0 0;max-width:52ch}
+.deskqr{text-align:center}
+.deskqr img{border-radius:12px;display:block;background:#fff;padding:8px}
+.qrcap{font-size:11px;color:var(--dim);margin-top:8px;text-transform:uppercase;letter-spacing:.07em}
+.tbl{overflow-x:auto}
+`;
+
 function supportPage(s) {
   const rows = s.messages.length
     ? s.messages
@@ -293,58 +309,60 @@ function supportPage(s) {
     ? `<p class="sowhat">The Handling column is the split that matters: <b>every “escalated” row is a question that cost a human their attention</b>, and every “auto” row is one that cost nothing because the answer was already written down. A row still offering Reply is a paid participant sitting idle — at roughly $1.69 a reading, a stalled worker is worth more than the minute it takes to answer. When the same question escalates twice, that is a missing FAQ entry, not a careless worker.</p>`
     : `<p class="sowhat">Nothing has arrived yet, so <b>this table cannot yet tell you whether the task is clear or merely untried</b> — a well-written task and an unstarted one look identical from here. It becomes evidence about task clarity only once participants are working.</p>`;
 
+  const answered = s.totals?.auto_answered ?? 0;
+  const total = s.totals?.total ?? 0;
+  const escalated = s.totals?.escalated ?? 0;
+  const num = supportNumber();
+  const pretty = num.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3");
+
   const body = `
-<h1>Worker support</h1>
-<p class="lede">Questions from paid participants, over SMS on ${supportNumber()}.</p>
-<p class="sub">Answers that are already written down go back immediately. Anything else escalates to a human, here and on the supervisor's phone — guessing at an answer about payment or eligibility is how you corrupt the readings you are buying.</p>
-<div class="banner live">Live line. These are real inbound texts, and Reply sends over the same thread.</div>
-
-<h2>Volume</h2>
-<div class="grid">
-  <div><label>Messages</label><div class="big">${s.totals.total ?? 0}</div></div>
-  <div><label>Auto-answered</label><div class="big ok">${s.totals.auto_answered ?? 0}</div></div>
-  <div><label>Escalated to you</label><div class="big warn">${s.totals.escalated ?? 0}</div></div>
-</div>
-<p class="sowhat">Only the middle number is free. <b>Escalated is the count of times a person had to stop and answer</b>, and it is the entire human cost of running support for this batch; auto-answered questions were settled from text written once, in advance. Watch the two move against each other — escalations growing while auto-answers stall means the written answers no longer cover what workers are actually asking.</p>
-
-<h2>Reach the line</h2>
-<div class="card qr">
-  <img src="/api/support/qr.png" alt="Scan to text worker support" width="150" height="150">
-  <div>
-    <strong>Scan to reach support</strong>
-    <p class="sub">Opens a text to <code>${supportNumber()}</code>. Point a participant, a reviewer, or anyone helping at this and they can ask without typing a number. Written answers come back automatically; anything else lands in the table below.</p>
+<div class="desk">
+  <div class="deskmain">
+    <label>Readers text this number</label>
+    <a class="glow" href="sms:${num}">${pretty}</a>
+    <p class="deskline">Answered automatically when we already have the answer written down.
+    Anything else reaches a person.</p>
+  </div>
+  <div class="deskqr">
+    <img src="/api/support/qr.png" alt="Scan to text support" width="150" height="150">
+    <div class="qrcap">Scan to text it</div>
   </div>
 </div>
-<p class="sowhat">This is deliberately not the supervisor's mobile. <b>A question that arrives on a personal number is invisible to every count on this page</b> — it skips auto-answer, logging, and the reference code that says who is asking. Route people here if you want support volume to stay measurable.</p>
 
-<h2>Messages</h2>
-<div class="card"><table>
-<thead><tr><th>Time</th><th>From</th><th>Message</th><th>Handling</th><th></th></tr></thead>
+<div class="grid" style="margin-top:14px">
+  <div><label>Messages in</label><div class="big">${total}</div></div>
+  <div><label>Answered instantly</label><div class="big ${answered ? "ok" : ""}">${answered}</div></div>
+  <div><label>Needed a person</label><div class="big ${escalated ? "warn" : ""}">${escalated}</div></div>
+</div>
+
+<h2>Live</h2>
+<div class="card"><div class="tbl"><table>
+<thead><tr><th>Time</th><th>From</th><th>Message</th><th>Handled</th><th></th></tr></thead>
 <tbody>${rows}</tbody>
-</table></div>
-${tableSoWhat}
-<p class="sub" style="margin-top:14px">Refreshes every 15 seconds.</p>`;
+</table></div></div>
 
-  const extraCss = `
-.qr{display:flex;gap:20px;align-items:center}
-.qr img{background:#fff;padding:8px;border-radius:10px;flex:none}
-.qr .sub{margin:6px 0 0}
-td.t{white-space:nowrap;color:var(--dim);font-variant-numeric:tabular-nums}
-td.msg{max-width:44ch}
-td.act{text-align:right;white-space:nowrap}
+<details>
+  <summary>How this works</summary>
+  <div class="inner">
+    <p class="sowhat">Answers are matched to written-down replies rather than generated. These are
+    promises to someone being paid, and <b>a confident wrong answer about payment or eligibility is
+    worse than silence</b> — so anything not already answered goes to a person instead of being guessed.</p>
+    <p class="sowhat">Every escalation is a question that cost someone their attention. <b>The same
+    question escalating twice is a missing answer, not a careless reader.</b></p>
+  </div>
+</details>
 `;
 
   const script = `
 async function reply(id){
-  const text=prompt("Reply to this worker over iMessage:");
+  const text = prompt("Reply to this reader:");
   if(!text) return;
-  const r=await fetch("/api/support/reply",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,text})});
-  const j=await r.json();
-  if(!r.ok) return alert("Failed: "+(j.error||"unknown"));
-  location.reload();
+  const r = await fetch("/api/support/reply",{method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({id, text})});
+  if(r.ok) location.reload(); else alert("Could not send that reply.");
 }
-setInterval(()=>location.reload(),15000);
+setInterval(()=>location.reload(), 20000);
 `;
 
-  return page({ title: "Worker Support", current: "/support", body, extraCss, script });
+  return page({ title: "Support desk", current: "/support", body, extraCss: EXTRA_CSS, script });
 }

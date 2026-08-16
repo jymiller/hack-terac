@@ -116,13 +116,19 @@ export function boardPage(s) {
       const models = Object.entries(f.models)
         .map(([m, v]) => `<span class="chip">${m} ${v.n ? pct(v.ok / v.n) : "—"}</span>`)
         .join(" ");
-      const cls = { LICENSED: "ok", "RULED OUT": "bad", UNMEASURED: "mut", "NOT YET DISTINGUISHED": "warn" }[f.verdict];
+      const cls = { LICENSED: "ok", "RULED OUT": "bad", UNMEASURED: "dim", "NOT YET DISTINGUISHED": "warn" }[f.verdict];
+      const says = {
+        LICENSED: "Safe to automate",
+        "RULED OUT": "Keep a person on it",
+        UNMEASURED: "Nobody has read it",
+        "NOT YET DISTINGUISHED": "Not enough evidence yet",
+      }[f.verdict];
       return `<tr>
       <td>${f.label}</td>
       <td class="num">${f.human.n ? `${f.human.ok}/${f.human.n}` : "—"}</td>
       <td class="num">${pct(f.human_rate)}</td>
       <td class="num mut">${f.human.n ? `${pct(f.human_lo)} – ${pct(f.human_hi)}` : "—"}</td>
-      <td><span class="tag ${cls}">${f.verdict}</span></td>
+      <td><span class="tag ${cls}">${says}</span></td>
       <td>${models || '<span class="mut">no model runs</span>'}</td>
     </tr>`;
     })
@@ -147,7 +153,7 @@ export function boardPage(s) {
 
   const gridSoWhat = s.human_n
     ? `<b>These counts are sample size, not score.</b> No field can be licensed on fewer than ${s.n_min} clean human
-       readings, so at roughly $1.69 a reading the gap between ${s.human_n} and that threshold is the price of deciding
+       readings, so the gap between ${s.human_n} and that threshold is the price of deciding
        the fields still open. Median time is how long one paid reading takes; the model runs are the same work with that
        time and that fee removed.`
     : `<b>Nothing here is a measurement yet.</b> With no paid human readings on the board these tiles show only what the
@@ -155,16 +161,19 @@ export function boardPage(s) {
        before any of them can license anything.`;
 
   const body = `
-<h1>Cost of Trust — Coverage Engine</h1>
+<h1>Which parts of the job still need a person?</h1>
 <p class="lede">${headline}</p>
-<p class="sub">Which steps of a compliance-certificate review can run with no human in the loop, and what the evidence
-actually licenses us to claim.</p>
+<p class="sub">We ask every reader for the same eight things from a compliance certificate. Some of the
+eight turn out to be easy and some are genuinely hard, so we track them <b>one at a time</b> rather than as a
+single score — the goal is to stop paying a person for the ones that are safe, and keep paying for the ones
+that are not. A field only comes off the human queue once the evidence is strong enough to defend, not once
+it merely looks good.</p>
 
 <div class="banner ${s.evidence_mode === "live" ? "live" : "syn"}">
   ${
     s.evidence_mode === "live"
-      ? `LIVE — figures below come from paid human extractions collected through Terac today.`
-      : `SYNTHETIC — no paid human input has arrived yet. Nothing here is a measured claim.`
+      ? `LIVE — every number below comes from people we paid through Terac today.`
+      : `NOTHING MEASURED YET — no paid reading has arrived, so none of this is a real finding.`
   }
 </div>
 
@@ -176,9 +185,9 @@ actually licenses us to claim.</p>
 </div>
 <p class="sowhat">${gridSoWhat}</p>
 
-<h2>Per-field readiness · floor ${(s.floor * 100).toFixed(0)}%</h2>
+<h2>The eight things we ask for</h2>
 <div class="card"><table>
-<thead><tr><th>Field extracted</th><th class="num">Correct</th><th class="num">Rate</th><th class="num">95% interval</th><th>Verdict</th><th>Models</th></tr></thead>
+<thead><tr><th>What we ask for</th><th class="num">People got it right</th><th class="num">Rate</th><th class="num">Range we can defend</th><th>Can it run without a person?</th><th>Models</th></tr></thead>
 <tbody>${fieldRows}</tbody>
 </table></div>
 <p class="sowhat"><b>The verdict column is the buy decision, and the interval is what earns it.</b> A field is licensed only
@@ -190,7 +199,7 @@ LICENSED fields come off the human queue, RULED OUT fields stay on it, and ${
       : `with none left undecided another wave buys no new licences`
   }.</p>
 
-<h2>The traps · which specific wrong value was taken</h2>
+<h2>Where readers go wrong, and why</h2>
 <div class="card"><table>
 <thead><tr><th>Field</th><th class="num">Humans</th><th class="num">Models</th><th>Why it is the plausible wrong answer</th></tr></thead>
 <tbody>${trapRows}</tbody>

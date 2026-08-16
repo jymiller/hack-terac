@@ -116,7 +116,7 @@ const EXTRA_CSS = `
 
 export function funnelPage(s) {
   const max = Math.max(1, ...s.stages.map((x) => x.n));
-  const W = 720, BAND = 74, GAP = 8, MINW = 90;
+  const W = 720, BAND = 70, GAP = 22, MINW = 90;
   const widthFor = (n) => MINW + (W - MINW) * (n / max);
 
   // Each band is a trapezoid running from its own width to the next stage's, so the shape
@@ -135,11 +135,15 @@ export function funnelPage(s) {
       <text x="${W / 2}" y="${y + 30}" text-anchor="middle" class="fn">${st.n}</text>
       <text x="${W / 2}" y="${y + 50}" text-anchor="middle" class="fl">${st.label}</text>
       <text x="${W / 2}" y="${y + 66}" text-anchor="middle" class="fs">${
-        st.step_conversion == null ? `${st.who === "terac" ? "Terac" : "ours"}` : `${pct(st.step_conversion)} of previous`
+        st.who === "terac" ? "Terac sees this" : "only we see this"
       }</text>
       ${
-        lost > 0
-          ? `<text x="${W - 4}" y="${y + BAND / 2 + 4}" text-anchor="end" class="fx">−${lost}</text>`
+        // The conversion sits in the gap BETWEEN two bands, because that is where the drop
+        // happens. A count of who was lost says nothing without the base it was lost from.
+        i + 1 < s.stages.length
+          ? `<text x="${W / 2}" y="${y + BAND + GAP - 1}" text-anchor="middle" class="fc">${pct(
+              s.stages[i + 1].step_conversion,
+            )}</text>`
           : ""
       }`;
     })
@@ -154,12 +158,13 @@ export function funnelPage(s) {
     .fl{fill:var(--fg);font:600 12.5px ui-sans-serif,system-ui}
     .fs{fill:var(--mut);font:11px ui-sans-serif,system-ui}
     .fx{fill:var(--bad);font:600 12px ui-sans-serif,system-ui}
+    .fc{fill:var(--mut);font:600 11px ui-sans-serif,system-ui;letter-spacing:.04em}
   </style>${bands}</svg>`;
 
   const body = `
 <h1>Recruitment → delivery funnel</h1>
-<p class="sub">Terac's dashboard stops at its own boundary. The blue stages happen on our host and are
-invisible to it — which is where the money actually leaks.</p>
+<p class="sub">Purple is everything Terac can see. Blue happens on our host, and Terac cannot see any of
+it — which is where the money actually goes missing.</p>
 
 ${
   s.teracError
@@ -169,25 +174,6 @@ ${
     : ""
 }
 
-<h2>What this wave has cost so far</h2>
-<div class="grid">
-  <div><label>Cost per recruit</label><div class="big">${money(s.cpi_cents)}</div></div>
-  <div><label>Paid, never arrived</label><div class="big ${s.ghost > 0 ? "bad" : ""}">${s.ghost}</div></div>
-  <div><label>Arrived, abandoned</label><div class="big ${s.abandoned > 0 ? "warn" : ""}">${s.abandoned}</div></div>
-  <div><label>Spent on non-delivery</label><div class="big ${s.wasted_cents ? "bad" : ""}">${money(s.wasted_cents)}</div></div>
-</div>
-<p class="sowhat">${
-    s.wasted_cents == null
-      ? `The ${s.ghost + s.abandoned} recruits who cleared screening and delivered nothing cannot be
-         priced: this opportunity carries no cost and participant count yet. <b>The leak is visible here,
-         its value is not</b> — until the opportunity records both, do not quote a waste figure.`
-      : `<b>${money(s.wasted_cents)} of this wave's recruitment spend bought no work at all</b> —
-         ${s.ghost} cleared screening and never opened the task, ${s.abandoned} opened it and left without
-         answers. At ${money(s.cpi_cents)} a recruit that loss scales with the wave, so it is worth fixing
-         the screening and the hand-off before buying a bigger one.`
-  }</p>
-
-<h2>The funnel</h2>
 <div class="card">
   <div class="legend">
     <span class="tag" style="color:var(--terac)">TERAC CAN SEE</span>
@@ -214,6 +200,24 @@ ${
     : ""
 }
 </div>
+
+<h2>What this wave has cost so far</h2>
+<div class="grid">
+  <div><label>Cost per recruit</label><div class="big">${money(s.cpi_cents)}</div></div>
+  <div><label>Paid, never arrived</label><div class="big ${s.ghost > 0 ? "bad" : ""}">${s.ghost}</div></div>
+  <div><label>Arrived, abandoned</label><div class="big ${s.abandoned > 0 ? "warn" : ""}">${s.abandoned}</div></div>
+  <div><label>Spent on non-delivery</label><div class="big ${s.wasted_cents ? "bad" : ""}">${money(s.wasted_cents)}</div></div>
+</div>
+<p class="sowhat">${
+    s.wasted_cents == null
+      ? `The ${s.ghost + s.abandoned} recruits who cleared screening and delivered nothing cannot be
+         priced: this opportunity carries no cost and participant count yet. <b>The leak is visible here,
+         its value is not</b> — until the opportunity records both, do not quote a waste figure.`
+      : `<b>${money(s.wasted_cents)} of this wave's recruitment spend bought no work at all</b> —
+         ${s.ghost} cleared screening and never opened the task, ${s.abandoned} opened it and left without
+         answers. At ${money(s.cpi_cents)} a recruit that loss scales with the wave, so it is worth fixing
+         the screening and the hand-off before buying a bigger one.`
+  }</p>
 
 <h2>Delivered work</h2>
 <div class="grid">

@@ -21,6 +21,12 @@ const PRICES = {
   "qwen3-vl-235b-a22b-instruct": { in: 0.3, out: 1.5 },
   "qwen3-vl-30b-a3b-instruct": { in: 0.2, out: 0.7 },
   "gemma-3-27b-it": { in: 0.119, out: 0.2 },
+  // Cheaper vision-capable candidates. deepseek-ocr-2 is purpose-built for document reading
+  // and is an order of magnitude below the general VLMs, which is exactly the trade this page
+  // exists to test: does a specialist reader cost less AND read well enough.
+  "deepseek-ocr-2": { in: 0.03, out: 0.03 },
+  "glm-4.5v": { in: 0.6, out: 1.8 },
+  "ernie-4.5-vl-424b-a47b": { in: 0.42, out: 1.25 },
 };
 
 export const priceFor = (modelId) => {

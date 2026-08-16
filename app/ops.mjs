@@ -97,7 +97,7 @@ async function opsState() {
     // Delivery per launched wave, from our own tables only. The funnel page joins Terac's
     // side for applied/screened; an operator glance does not need a network call to answer
     // "did the people we paid for turn up".
-    query(`select o.wave, o.participants, o.cost_cents, o.cpi_cents, o.status,
+    query(`select o.id, o.wave, o.participants, o.cost_cents, o.cpi_cents, o.status,
              (select count(*)::int from terac_responses r where r.payload->>'wave' = o.wave) arrived,
              (select count(*)::int from extractions e where e.wave = o.wave and e.source='human') delivered
              from terac_opportunities o where o.launched_at is not null
@@ -146,7 +146,25 @@ async function opsState() {
     opportunities: opps.rows,
     completed_tasks: done,
     opened_tasks: opened,
-    waves: waveRes.rows,
+    // Our own status column is written at launch and never again, so it said "active" for a
+    // wave Terac had already fulfilled. Terac is the authority on its own study; we ask it
+    // every render rather than showing a number we cannot stand behind.
+    waves: await Promise.all(
+      waveRes.rows.map(async (w) => {
+        try {
+          const o = await getOpportunity(w.id);
+          return {
+            ...w,
+            terac_status: o.status ?? null,
+            terac_stats: o.submission_stats ?? null,
+            terac_url: o.links?.dashboard?.submissions ?? w.dashboard_url ?? null,
+          };
+        } catch (err) {
+          return { ...w, terac_status: null, terac_error: err.message, terac_url: w.dashboard_url ?? null };
+        }
+      }),
+    ),
+    checked_at: new Date().toISOString(),
     total_attestations: certRes.rows.reduce((a, r) => a + Number(r.total ?? 0), 0),
   };
 }
@@ -339,7 +357,12 @@ export function registerOpsRoutes(app) {
 }
 
 function opsPage(s) {
-  const live = s.opportunities.find((o) => o.status === "active");
+  // Terac's word, not our launch-time guess. A wave it calls fulfilled or stopped is finished,
+  // however our own status column was left.
+  const liveWave = (s.waves ?? []).find((w) => (w.terac_status ?? w.status) === "active");
+  const live = liveWave ? s.opportunities.find((o) => o.wave === liveWave.wave) : null;
+  const latest = s.waves?.[0] ?? null;
+  const stats = latest?.terac_stats ?? null;
   const need = nMin(s.floor);
   const floorPct = (s.floor * 100).toFixed(0);
   // Tag colour is presentation only: .tag borders in currentColor, so the utility class
@@ -384,6 +407,7 @@ function opsPage(s) {
 .mini .n{font-size:21px;font-variant-numeric:tabular-nums;font-weight:600}
 .mini .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
 .mini .d{font-size:11.5px;color:var(--bad);margin-top:4px}
+.mini .s{font-size:11px;color:var(--dim);margin-top:4px;line-height:1.35}
 .act{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 16px;border-radius:var(--r);
   border:1px solid var(--line);background:var(--card);margin-bottom:10px}
 .act .t{flex:1;min-width:240px;font-size:13.5px}
@@ -420,11 +444,16 @@ details .inner{padding:0 16px 16px}
 <h1>Operator</h1>
 <p class="sub" style="margin-bottom:18px">${
     live
-      ? `<span class="live-dot"></span>Wave <code>${live.wave}</code> is recruiting.`
-      : draft
-        ? "A draft is ready. Nothing is recruiting."
-        : "Nothing is recruiting."
-  } Everything here is free except <b>Launch</b>.</p>
+      ? `<span class="live-dot"></span>Wave <code>${live.wave}</code> is still recruiting.`
+      : latest
+        ? `Latest wave <code>${latest.wave}</code> is <b>${latest.terac_status ?? latest.status}</b> — nobody is being recruited right now.`
+        : "No wave has been launched."
+  } Nothing here spends money except <b>Launch</b>.
+  ${
+    latest?.terac_url
+      ? `<br>Checked against Terac just now. <a href="${latest.terac_url}" target="_blank">Open this wave in Terac to verify →</a>`
+      : ""
+  }</p>
 
 <div class="strip">
   <div><label>Delivered, this wave</label><div class="big">${delivered}<span style="font-size:15px;color:var(--mut)">/${paid || "—"}</span></div>
@@ -444,14 +473,24 @@ details .inner{padding:0 16px 16px}
 </div>
 
 <div class="mini">
-  <div><div class="n">${paid}</div><div class="l">Paid for</div></div>
-  <div><div class="n">${arrived}</div><div class="l">Opened the task</div>${
-    paid - arrived > 0 ? `<div class="d">−${paid - arrived} never arrived</div>` : ""
-  }</div>
-  <div><div class="n">${delivered}</div><div class="l">Delivered</div>${
-    arrived - delivered > 0 ? `<div class="d">−${arrived - delivered} abandoned</div>` : ""
-  }</div>
+  <div><div class="n">${paid}</div><div class="l">People we paid for</div>
+    <div class="s">what we bought from Terac</div></div>
+  <div><div class="n">${stats ? stats.total : "—"}</div><div class="l">Terac says finished</div>
+    <div class="s">${
+      stats
+        ? `${stats.approved} approved · ${stats.rejected} rejected · ${stats.in_progress} still going`
+        : latest?.terac_error
+          ? "Terac did not answer"
+          : "no wave yet"
+    }</div></div>
+  <div><div class="n">${arrived}</div><div class="l">Opened our task page</div>
+    <div class="s">${paid - arrived > 0 ? `${paid - arrived} never turned up` : "everyone turned up"}</div></div>
+  <div><div class="n">${delivered}</div><div class="l">Gave us answers</div>
+    <div class="s">${arrived - delivered > 0 ? `${arrived - delivered} started and quit` : "everyone who opened it finished"}</div></div>
 </div>
+<p class="sowhat">The first two boxes are <b>Terac's numbers</b>, read from Terac when this page loaded.
+The last two are ours, and only we can see them — Terac knows it sent people, but not whether they ever
+reached the document. <b>When those two halves disagree, the gap is what we paid for and did not get.</b></p>
 
 <h2>Needs you</h2>
 ${

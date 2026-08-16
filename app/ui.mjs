@@ -29,8 +29,9 @@ body{margin:0;background:var(--bg);color:var(--fg);
   margin-bottom:28px}
 .top .wrap{padding-top:18px;padding-bottom:0}
 .brand{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
-.brand b{font-size:14px;letter-spacing:-.01em;font-weight:600}
+.brand b{font-size:14px;letter-spacing:-.01em;font-weight:650}
 .brand span{font-size:12px;color:var(--dim)}
+.brand span::before{content:'· '}
 nav{display:flex;gap:2px;flex-wrap:wrap;font-size:13px}
 nav a{color:var(--mut);text-decoration:none;padding:7px 11px;border-radius:7px 7px 0 0;
   border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -114,7 +115,7 @@ const TABS = [
 /** The masthead. `current` is the pathname of the page drawing it. */
 export function header(current) {
   return `<div class="top"><div class="wrap">
-<div class="brand"><b>Cost of Trust</b><span>— what a compliance review can safely automate</span></div>
+<div class="brand"><b>Human Attestation</b><span>The Cost of Trust</span></div>
 <nav>${TABS.map(([href, label]) =>
     `<a href="${href}"${href === current ? ' class="on"' : ""}>${label}</a>`,
   ).join("")}</nav>
