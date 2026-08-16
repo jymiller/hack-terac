@@ -69,6 +69,16 @@ export async function recordExtraction({
 export const WALKUP_WAVE = "walkup";
 export const WALKUP_PREFIX = "walk_";
 
+/**
+ * QA readings. Marked on three independent axes so they can never be mistaken for evidence:
+ * the submission id carries a prefix, the wave is its own value, and the row is written with
+ * source 'walkup' so it is outside the paid-panel `human` population by construction. The
+ * page also says so on screen, so nobody fills one in believing it counts.
+ */
+export const TEST_PREFIX = "test_";
+export const TEST_WAVE = "qatest";
+const isTest = (sid, wave) => wave === TEST_WAVE || String(sid ?? "").startsWith(TEST_PREFIX);
+
 export function registerExtractRoutes(app) {
   const json = express.json();
   const form = express.urlencoded({ extended: false });
@@ -129,8 +139,14 @@ alongside the model runs on the same document.</p>
   app.get("/x/:wave", async (req, res) => {
     const sid = req.query.teracSubmissionId ?? req.query.submissionId;
     if (!sid) return res.status(400).send("This link is missing its Terac submission id.");
-    const cert = certFor(sid);
-    const walkup = req.params.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
+    // Terac mints the submission id, so hashing it cannot produce a URL pinned to one
+    // certificate. An explicit ?cert= does, which is what three separate Terac opportunities
+    // need. An absent or unknown value falls back to the hash, so every existing link and
+    // every walk-up behaves exactly as before.
+    const cert = byId(req.query.cert) ?? certFor(sid);
+    const test = isTest(sid, req.params.wave);
+    const walkup =
+      test || req.params.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
     // Arrival receipts exist to measure the Terac funnel. A walk-up was never recruited,
     // so recording one there would count a stranger as a participant we paid for.
     if (!walkup) {
@@ -158,7 +174,8 @@ alongside the model runs on the same document.</p>
         submissionId: sid,
         ref: refFor(sid),
         taskId: req.query.taskId ?? "",
-        wave: req.params.wave,
+        wave: test ? TEST_WAVE : req.params.wave,
+        test,
       }),
     );
   });
@@ -170,7 +187,8 @@ alongside the model runs on the same document.</p>
     // A walk-up reader came through the open link, not through Terac. Their work is real
     // and worth recording, but it is not paid panel evidence and is never redirected to
     // Terac's callback, which would try to settle a submission that does not exist.
-    const walkup = b.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
+    const test = isTest(sid, b.wave);
+    const walkup = test || b.wave === WALKUP_WAVE || String(sid).startsWith(WALKUP_PREFIX);
     if (!sid || !certId) return res.status(400).json({ error: "teracSubmissionId and certId required" });
     try {
       // The unique index carries model_id, which is NULL for every human row, and Postgres
@@ -194,7 +212,7 @@ alongside the model runs on the same document.</p>
       const answers = Object.fromEntries(FIELDS.map((f) => [f.key, b[f.key] ?? ""]));
       await recordExtraction({
         submissionId: sid,
-        wave: b.wave,
+        wave: test ? TEST_WAVE : b.wave,
         certId,
         source: walkup ? "walkup" : "human",
         answers,
@@ -220,7 +238,7 @@ alongside the model runs on the same document.</p>
   });
 }
 
-function extractPage({ cert, submissionId, taskId, wave, ref }) {
+function extractPage({ cert, submissionId, taskId, wave, ref, test = false }) {
   const imgs = Array.from(
     { length: cert.pages },
     (_, i) => `/docs/png/${cert.file}-${i + 1}.png`,
@@ -268,6 +286,13 @@ button{margin-top:22px;width:100%;background:var(--acc);color:#fff;border:0;bord
 </style></head><body><div class="wrap">
 <h1>Read this compliance certificate and report eight things it states</h1>
 <p class="sub">A ${cert.pages}-page compliance certificate is on the left — click it to zoom in. All eight answers are printed in it, so nothing has to be worked out. Most people take 7 to 9 minutes, and there is no time limit.</p>
+${
+  test
+    ? `<div style="border:2px solid #b45309;color:#b45309;border-radius:10px;padding:12px 14px;margin:0 0 18px;font-size:14px;font-weight:600">
+    TEST READING — not paid panel evidence. This is recorded as wave <code>${TEST_WAVE}</code> under
+    reference <code>${submissionId}</code> and is excluded from the expert results.</div>`
+    : ""
+}
 <p class="smallscreen">The print on this document is small. If you can, open this task on a laptop or desktop — it will be much easier to read.</p>
 <div class="cols">
   <div class="doc">
