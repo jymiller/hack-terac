@@ -8,8 +8,10 @@
 1. **DO NOT START ANY TASK IN TERAC WITHOUT JOHN'S APPROVAL.** No launch, no resume, no
    draft, no feasibility request. He said this after I launched a wave while he was telling
    me he wanted to press the button himself. Reads are fine. **He presses launch, not you.**
-2. **Use the PDFs as-is.** The ENID line in the certificates stays. He settled this with me;
-   the design session has not heard it from him directly and is right not to act on my relay.
+2. ~~**Use the PDFs as-is.**~~ **Superseded 16 August 2026.** John instructed directly that
+   all three certificates be rebuilt around fictitious companies and every trace removed
+   throughout the application. The documents are now generated from
+   `fixtures/certificates.json` by `scripts/build-certificates.mjs` and name nothing real.
 3. He commits/pushes/merges when he asks. The design session has explicit authorisation to
    merge "with coordination with the full-stack-developer" — that coordination is you.
 
@@ -32,7 +34,8 @@
 - **1 paid human reading** via Terac, 8/8. That is the only paid panel evidence that exists.
 - **15 model runs**, 5 open-weight vision models × 3 certificates, on the corrected setup:
   llama-4-scout, qwen3-vl-235b, llama-4-maverick, qwen3-vl-30b all 24/24; gemma-3-27b 21/24
-  (5/8 on HS1, where the numerator is four cash-flow lines summed rather than printed).
+  (5/8 on the certificate whose numerator is four cash-flow lines summed rather than printed).
+  These runs predate the 16 August certificate rebuild and refer to the superseded documents.
 - **Walk-up readings** are `source='walkup'` — real human work, never counted as paid Terac
   evidence, no arrival receipt, no Terac callback.
 

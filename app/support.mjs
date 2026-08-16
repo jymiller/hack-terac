@@ -58,7 +58,7 @@ const FAQ = [
     key: "format",
     match: /format|decimal|how should i write|units|£|pounds|currency|date format/i,
     reply:
-      "Write figures exactly as the document prints them, without the £ sign — for example 534.3 or 2.91. Dates as YYYY-MM-DD.",
+      "Write figures exactly as the document prints them, without the £ sign — for example 412.6 or 2.92. Dates as YYYY-MM-DD.",
   },
   {
     key: "payment",
@@ -174,7 +174,7 @@ export async function supportState() {
  * mobile, and routing participants straight to it bypasses auto-answer, logging, and the
  * reference code that says who is asking.
  */
-export const supportNumber = () => process.env.LINQ_SUPPORT_NUMBER ?? "+16462995885";
+export const supportNumber = () => process.env.LINQ_SUPPORT_NUMBER ?? null;
 
 /**
  * A short, per-participant reference. Deterministic from the submission id, so it can be
@@ -247,6 +247,7 @@ export function registerSupportRoutes(app) {
         if (!n) return res.status(404).send("LINQ_SUPERVISOR_NUMBER not set");
         uri = `sms:${n.startsWith("+") ? n : "+" + n}`;
       } else {
+        if (!supportNumber()) return res.status(404).send("LINQ_SUPPORT_NUMBER not set");
         uri = `sms:${supportNumber()}`;
       }
       const png = await QRCode.toBuffer(uri, { width: 300, margin: 1 });
@@ -303,7 +304,7 @@ function supportPage(s) {
     }</td></tr>`,
         )
         .join("")
-    : `<tr><td colspan="5" class="mut">No messages yet. Text ${supportNumber()} to try it.</td></tr>`;
+    : `<tr><td colspan="5" class="mut">No messages yet.${supportNumber() ? ` Text ${supportNumber()} to try it.` : ""}</td></tr>`;
 
   const tableSoWhat = s.messages.length
     ? `<p class="sowhat">The Handling column is the split that matters: <b>every “escalated” row is a question that cost a human their attention</b>, and every “auto” row is one that cost nothing because the answer was already written down. A row still offering Reply is a paid participant sitting idle — at roughly $1.69 a reading, a stalled worker is worth more than the minute it takes to answer. When the same question escalates twice, that is a missing FAQ entry, not a careless worker.</p>`
@@ -313,7 +314,7 @@ function supportPage(s) {
   const total = s.totals?.total ?? 0;
   const escalated = s.totals?.escalated ?? 0;
   const num = supportNumber();
-  const pretty = num.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3");
+  const pretty = num ? num.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3") : "not configured";
 
   const body = `
 <div class="desk">

@@ -344,10 +344,10 @@ ${
     <p class="sub" style="margin:6px 0 0">${INSTRUCTION.split("\n")[0]}</p>
     <ol>${INSTRUCTION.split("\n").filter((l) => /^\d\./.test(l.trim())).map((l) => `<li>${l.replace(/^\s*\d\.\s*/, "")}</li>`).join("")}</ol>
     <div class="warn">${INSTRUCTION.split("\n\n").pop().replace(/\n/g, " ").replace('"not stated"', "<strong>not stated</strong>")}</div>
-    <a class="ask" href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}">
+    ${supportNumber() ? `<a class="ask" href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}">
       Text us a question
       <span>Not sure about something? We reply. Your reference ${ref} is filled in already.</span>
-    </a>
+    </a>` : ""}
     ${FIELDS.map((f) =>
       f.key === "compliant"
         ? `<label>${f.label} <span class="hint">— ${f.hint}</span></label>
@@ -356,7 +356,7 @@ ${
            <input name="${f.key}" required autocomplete="off">`,
     ).join("")}
     <button type="submit">Submit my answers</button>
-    <p class="note">Stuck? Text <a href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}"><strong>${supportNumber()}</strong></a> and we will reply. Include your reference <strong>${ref}</strong> so we know which task you are on.</p>
+    ${supportNumber() ? `<p class="note">Stuck? Text <a href="sms:${supportNumber()}?&body=${encodeURIComponent(`Ref ${ref}: `)}"><strong>${supportNumber()}</strong></a> and we will reply. Include your reference <strong>${ref}</strong> so we know which task you are on.</p>` : ""}
     <p class="note">Your answers are saved against this task only. The certificate is made up for testing — no real company.</p>
   </form>
 </div>

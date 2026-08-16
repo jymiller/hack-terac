@@ -84,7 +84,7 @@ export async function boardState() {
   return {
     floor: FLOOR,
     n_min: nMin(FLOOR),
-    certs: CERTS.map((c) => ({ id: c.id, entity: c.entity, ratio: c.truth.ratio_name, answered: seen.get(c.id) ?? 0 })),
+    certs: CERTS.map((c) => ({ id: c.id, file: c.file, entity: c.entity, ratio: c.truth.ratio_name, answered: seen.get(c.id) ?? 0 })),
     fields,
     distractors: Object.values(distractors).sort((a, b) => b.human + b.model - (a.human + a.model)),
     human_n: humanN,
@@ -204,7 +204,7 @@ readings, so below that a wave can rule something out cheaply but can never turn
 <p class="sub">Made-up certificates. No real company, person, or account appears in any of them.</p>
 <div class="card"><table>
 <thead><tr><th>Certificate</th><th>Company</th><th>Main ratio</th><th class="num">Readings</th></tr></thead>
-<tbody>${s.certs.map((c) => `<tr><td><a href="/docs/${c.id === "abpa" ? "abpa-demo-compliance-certificate-2026-06-30" : c.id === "hs1" ? "hs1-demo-compliance-certificate-2026-03-31" : "lgw-demo-compliance-certificate-2026-03-31"}.pdf">${c.id.toUpperCase()}</a></td><td>${c.entity}</td><td>${c.ratio}</td><td class="num">${c.answered}</td></tr>`).join("")}</tbody>
+<tbody>${s.certs.map((c) => `<tr><td><a href="/docs/${c.file}.pdf">${c.id}</a></td><td>${c.entity}</td><td>${c.ratio}</td><td class="num">${c.answered}</td></tr>`).join("")}</tbody>
 </table></div>
 <p class="sowhat"><b>Readings per certificate is how far the claim reaches.</b> Everything above rests on
 these ${s.certs.length} made-up documents and one instruction, so what is safe here is safe for this layout — a certificate that

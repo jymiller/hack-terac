@@ -34,12 +34,13 @@ Ruling a reader **out** is cheap; clearing one **in** is the expensive half.
 
 ### The error that proves the point
 
-`gemma-3-27b` reported **1.65** for HS1's Historic DSCR. That is the *previous*
-test date's figure, printed inches from the current one. A citation checker
-confirms it appears in the document, because it does.
+`gemma-3-27b` reported the *previous* test date's DSCR — a figure printed inches
+from the current one, on the same page. A citation checker confirms it appears
+in the document, because it does.
 
-A paid human made the mirror-image error on ABPA: **543.3** where the
-certificate prints **534.3** — a digit transposition, not a trap.
+A paid human made the mirror-image error on another certificate: a digit
+transposition, reporting `543.3` where the document printed `534.3`. Not a trap,
+just a misread — and equally invisible to a checker.
 
 Different failure modes, same consequence: neither is catchable by verifying
 that an answer appears in the source.
@@ -124,13 +125,20 @@ real defect found and fixed during the build:
 ## What this does not prove
 
 - Six paid readings license nothing. No field clears the floor.
-- Five of six paid readings are on one certificate (ABPA). A wave on HS1 — the
-  certificate that discriminates — was recruiting when the event closed.
+- Five of the six paid readings are on a single certificate — the one whose
+  numerator is printed directly. A wave on the harder document, where the
+  numerator must be assembled from four separate lines, was still recruiting
+  when the event closed.
 - Model runs and human runs share the same images but not the same prompt: the
   models are additionally given an output schema, which no person is shown. The
   run log's `prompt_sha` differs between arms and says so.
 - The models were re-run after a resolution *and* instruction change at once, so
   "the models improved" is honest; "we can say why" is not.
+- **The certificates in this repository are not the ones those readings were
+  taken on.** After the event the documents were rebuilt around wholly invented
+  companies (see below), so every recorded reading refers to a superseded
+  document set. The run log's `images_sha` makes that visible rather than
+  letting the two sets be silently conflated.
 
 ---
 
@@ -166,9 +174,28 @@ Environment: `DATABASE_URL`, `APP_URL`, `TERAC_API_KEY`, `NOVITA_API_KEY`,
 `STRIPE_SECRET_KEY`. Without them the app boots and the pages render from
 whatever is in the database.
 
+### Rebuilding the certificates
+
+```sh
+node scripts/build-certificates.mjs
+```
+
+Reads [fixtures/certificates.json](fixtures/certificates.json) and writes the
+PDFs and 200 DPI pages. It refuses to write anything unless, for every
+certificate, the printed components cross-foot to their stated totals, the
+numerator divided by the denominator rounds exactly to the printed ratio, every
+registered distractor is genuinely printed somewhere on the page, and the
+rendered page count matches the spec — because a distractor that isn't on the
+page is a trap that cannot be taken, and a page the spec doesn't know about is
+one the reader is never shown but is still marked on.
+
 ## Boundary
 
-Standalone project. No Enid code, Enid data, client documents, or production
-credentials. The three certificates are synthetic examples describing no real
-company, person, or account. Real participants and real payments were in scope
+Standalone project. No client documents or production credentials.
+
+**The three certificates are wholly invented.** Every company, subsidiary,
+issuer, trustee, agent, signatory, agreement and figure in them is fictitious.
+They are built to be structurally realistic — the covenant architecture of a
+secured financing is a genre, and the documents are written in it — but they
+describe no real company, no real financing, and no actual certification. Real participants and real payments were in scope
 for the event; synthetic fixtures stay visibly labelled.

@@ -23,3 +23,6 @@ artifacts/private/
 .agents/
 .cortex/
 skills-lock.json
+
+# intermediate HTML for scripts/build-certificates.mjs
+.certbuild/
