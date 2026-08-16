@@ -23,6 +23,27 @@ const STAGES = [
   { key: "scored", label: "Marked against the answers", who: "us" },
 ];
 
+/**
+ * A worked example, at a scale we have not run.
+ *
+ * The rates are NOT invented: they are the ones measured across every real wave so far, applied
+ * to a larger cohort so the shape of the funnel is legible. Anything invented would be a picture
+ * of a business we do not have, so the only fiction here is the size of the intake.
+ */
+const SAMPLE_APPLIED = 250;
+
+function sampleFrom(measured) {
+  const rates = measured.map((st, i) =>
+    i === 0 ? 1 : measured[i - 1].n > 0 ? st.n / measured[i - 1].n : 0,
+  );
+  let n = SAMPLE_APPLIED;
+  return measured.map((st, i) => {
+    n = i === 0 ? SAMPLE_APPLIED : Math.round(n * rates[i]);
+    const prev = i === 0 ? null : null;
+    return { ...st, n, of_applied: n / SAMPLE_APPLIED, step_conversion: i === 0 ? null : rates[i], lost: null };
+  });
+}
+
 export async function funnelState(opportunityId) {
   // Every launched wave, so the page can offer them and so "all" can add them up. A funnel
   // over one wave answers "did that wave work"; a funnel over all of them answers "does
@@ -32,7 +53,9 @@ export async function funnelState(opportunityId) {
        from terac_opportunities where launched_at is not null order by launched_at desc`,
   ).catch(() => ({ rows: [] }));
 
-  const scope = opportunityId === "all" ? allWaves.map((w) => w.id) : [opportunityId].filter(Boolean);
+  const wantSample = opportunityId === "sample";
+  const scope =
+    opportunityId === "all" || wantSample ? allWaves.map((w) => w.id) : [opportunityId].filter(Boolean);
 
   let subs = [];
   let teracError = null;
@@ -72,7 +95,9 @@ export async function funnelState(opportunityId) {
 
   // Money is committed per recruited participant, so the cost of a stage is what we paid to
   // reach it — including everyone who then fell out of the next one.
-  const inScope = opportunityId === "all" ? allWaves : allWaves.filter((w) => w.id === opportunityId);
+  // The worked example prices its invented volume at the blended rate we have actually paid.
+  const inScope =
+    opportunityId === "all" || wantSample ? allWaves : allWaves.filter((w) => w.id === opportunityId);
   const paidTotal = inScope.reduce((a, w) => a + Number(w.participants ?? 0), 0);
   const spentTotal = inScope.reduce((a, w) => a + Number(w.cost_cents ?? 0), 0);
   const opp = oppRes.rows[0] ?? null;
@@ -91,22 +116,40 @@ export async function funnelState(opportunityId) {
   });
 
   // The stage Terac cannot see, and the one that cost us today.
-  const ghost = counts.screened - counts.arrived;
-  const abandoned = counts.arrived - counts.submitted;
+  let ghost = counts.screened - counts.arrived;
+  let abandoned = counts.arrived - counts.submitted;
+
+  const sampled = wantSample ? sampleFrom(rows) : null;
+  if (sampled) {
+    for (let i = 1; i < sampled.length; i++) sampled[i].lost = sampled[i - 1].n - sampled[i].n;
+    ghost = sampled[1].n - sampled[2].n;
+    abandoned = sampled[2].n - sampled[3].n;
+  }
 
   const scores = [...submitted.values()];
   return {
+    sample: wantSample,
     opportunity: opp ?? null,
     scope: opportunityId === "all" ? "all" : opportunityId,
+    sample_applied: SAMPLE_APPLIED,
     waves: allWaves,
     spent_cents: spentTotal,
     teracError,
-    stages: rows,
+    stages: sampled ?? rows,
+    measured_stages: rows,
     byStatus,
     cpi_cents: cpi,
     ghost,
     abandoned,
-    wasted_cents: cpi != null ? Math.round(cpi * (ghost + abandoned)) : null,
+    wasted_cents:
+      cpi != null
+        ? Math.round(
+            cpi *
+              (sampled
+                ? sampled[1].n - sampled[2].n + (sampled[2].n - sampled[3].n)
+                : ghost + abandoned),
+          )
+        : null,
     field_accuracy: scores.length
       ? scores.reduce((a, r) => a + r.correct / r.total, 0) / scores.length
       : null,
@@ -185,6 +228,7 @@ export function funnelPage(s) {
   <label for="opportunity">Showing</label>
   <select name="opportunity" id="opportunity" onchange="this.form.submit()">
     <option value="all"${s.scope === "all" ? " selected" : ""}>Every wave together</option>
+    <option value="sample"${s.sample ? " selected" : ""}>Worked example · 250 applicants</option>
     ${(s.waves ?? [])
       .map((w) => {
         const c = (w.task_url?.match(/[?&]cert=([a-z0-9]+)/) ?? [])[1];
@@ -199,6 +243,14 @@ export function funnelPage(s) {
 <p class="sub">Purple is what Terac can see. Blue happens on our site, and that is where the money
 goes missing.</p>
 
+${
+  s.sample
+    ? `<div class="banner syn"><b>WORKED EXAMPLE — these people do not exist.</b> The intake of
+       ${s.sample_applied} applicants is invented. Every conversion rate between the stages is the one
+       we have actually measured across our real waves, applied to that larger intake, so the shape is
+       real even though the volume is not. Switch the picker above to see the waves that genuinely ran.</div>`
+    : ""
+}
 ${
   s.teracError
     ? `<div class="banner syn">Terac did not answer: <code>${s.teracError}</code>. The top two numbers are
