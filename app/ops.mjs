@@ -4,6 +4,7 @@ import { CERTS, FIELDS, byId } from "./certs.mjs";
 const FIELD_COUNT = 8;
 import {
   getContext,
+  updateOpportunity,
   createOpportunity,
   createProject,
   getOpportunity,
@@ -167,6 +168,26 @@ async function opsState() {
       }),
     ),
     checked_at: new Date().toISOString(),
+    drafts: await Promise.all(
+      opps.rows
+        .filter((o) => o.status === "draft")
+        .map(async (o) => {
+          try {
+            const t = await getOpportunity(o.id);
+            return {
+              ...o,
+              participants: t.num_participants ?? o.participants,
+              cost_cents: t.pricing?.total_cost_cents ?? o.cost_cents,
+              minutes: t.estimated_duration_minutes ?? o.minutes,
+              terac_status: t.status ?? null,
+              task_url: t.tasks?.[0]?.task_url ?? o.task_url,
+              dashboard_url: t.links?.dashboard?.draft_editor ?? o.dashboard_url,
+            };
+          } catch {
+            return { ...o, terac_status: null };
+          }
+        }),
+    ),
     balance_cents: await getContext()
       .then((c) => Math.round(Number(c?.balanceDollars ?? 0) * 100))
       .catch(() => null),
@@ -307,6 +328,23 @@ export function registerOpsRoutes(app) {
   });
 
   /** SPENDS REAL MONEY. Reached only by the operator clicking Launch in /ops. */
+  app.post("/api/ops/resize", json, async (req, res) => {
+    const { opportunityId, participants } = req.body ?? {};
+    const n = Math.max(1, Math.min(1000, Number(participants) || 0));
+    if (!opportunityId || !n) return res.status(400).json({ error: "opportunityId and participants required" });
+    try {
+      const t = await updateOpportunity(opportunityId, { num_participants: n });
+      const cost = t?.pricing?.total_cost_cents ?? null;
+      await query(
+        `update terac_opportunities set participants = $2, cost_cents = coalesce($3, cost_cents) where id = $1`,
+        [opportunityId, n, cost],
+      ).catch(() => {});
+      res.json({ ok: true, participants: t?.num_participants ?? n, cost_cents: cost });
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
   app.post("/api/ops/launch", json, async (req, res) => {
     try {
       const id = req.body?.opportunityId;
@@ -395,8 +433,9 @@ function opsPage(s) {
   };
   const here = host(s.app_url);
   const launchable = (o) => here != null && host(o.task_url) === here;
-  const draft = s.opportunities.find((o) => o.status === "draft" && launchable(o));
-  const stale = s.opportunities.filter((o) => o.status === "draft" && !launchable(o));
+  const liveDrafts = (s.drafts ?? []).filter((d) => d.terac_status === "draft");
+  const draft = liveDrafts.find((o) => launchable(o)) ?? null;
+  const stale = liveDrafts.filter((o) => !launchable(o));
 
   const extraCss = `
 .row input{width:110px}
@@ -452,7 +491,12 @@ details .inner{padding:0 16px 16px}
 .callout .meta{color:var(--mut);font-size:12px;margin-top:5px;word-break:break-all}
 `;
 
-  const w = s.waves?.[0] ?? null;
+  // One named wave, never a blend. The first wave was stopped and refunded, so rolling it into
+  // an all-time total made both the spend and the per-reading figure describe nothing that
+  // happened. Every wave's own row is in the Waves table below.
+  const w = (s.waves ?? []).find((x) => (x.terac_status ?? x.status) === "active") ?? s.waves?.[0] ?? null;
+  const wCert = w ? CERTS.find((c) => c.id === (w.task_url?.match(/[?&]cert=([a-z0-9]+)/) ?? [])[1]) : null;
+  const wState = w ? (w.terac_status ?? w.status) : null;
   const paid = w?.participants ?? 0;
   const arrived = w?.arrived ?? 0;
   const delivered = w?.delivered ?? 0;
@@ -482,10 +526,16 @@ details .inner{padding:0 16px 16px}
   }</p>
 
 <div class="strip">
-  <div><label>Delivered, this wave</label><div class="big">${delivered}<span style="font-size:15px;color:var(--mut)">/${paid || "—"}</span></div>
-    <div class="k">${deliveredAll} across every wave</div></div>
-  <div><label>Committed</label><div class="big">${money(committed) ?? "$0.00"}</div>
-    <div class="k">${w?.cpi_cents ? money(w.cpi_cents) + " per recruit" : "spend is committed at launch"}</div></div>
+  <div><label>${w ? `Wave ${w.wave} · delivered` : "Delivered"}</label><div class="big">${delivered}<span style="font-size:15px;color:var(--mut)">/${paid || "—"}</span></div>
+    <div class="k">${
+      w
+        ? `${wCert ? wCert.entity : "mixed documents"} · ${
+            wState === "active" ? "still recruiting" : "done recruiting"
+          }`
+        : "no wave launched"
+    }</div></div>
+  <div><label>Spent on this wave</label><div class="big">${money(w?.cost_cents) ?? "$0.00"}</div>
+    <div class="k">${w?.cpi_cents ? money(w.cpi_cents) + " per reader" : "committed at launch"}</div></div>
   <div><label>Per usable reading</label><div class="big ${waste != null && waste > 0 ? "warn" : waste === 0 ? "ok" : ""}">${money(perUsable) ?? "—"}</div>
     <div class="k">${
       waste == null
@@ -551,6 +601,11 @@ ${
         : ""
     }
     <p class="padlink">They will open <a href="${draft.task_url}?teracSubmissionId=preview_pad" target="_blank">${draft.task_url}</a></p>
+    <div class="row" style="margin-top:14px">
+      <div><label>Change the number of readers</label><input id="resize" type="number"
+        value="${draft.participants}" min="1" max="1000"></div>
+      <button class="ghost" onclick="resizeIt('${draft.id}')">Update and reprice</button>
+    </div>
     <div class="padgo">
       <button class="go" onclick="launchIt('${draft.id}')" ${short ? "disabled" : ""}>GO — start recruiting</button>
       <span class="padwarn">This spends ${money(draft.cost_cents) ?? "money"}. Nothing else on this page does.</span>
@@ -685,8 +740,10 @@ ${s.corpus
     returned nothing</b> — a funnel problem, not a pricing one. It is deliberately never blended
     across waves: these have been priced sevenfold apart, and an all-time average of that compares
     nothing to nothing.</p>
-    <p class="sowhat">Across every wave so far: ${money(committed)} committed for ${deliveredAll}
-    readings. Read that as a history, not a rate.</p>
+    <p class="sowhat">Across every wave ever launched: ${money(committed)} committed for ${deliveredAll}
+    readings — including waves that were stopped and refunded, so read it as a history rather than a
+    rate. <b>Each wave's own numbers are in the Waves table</b>, which is the only place they mean
+    anything.</p>
   </div>
 </details>
 
@@ -728,6 +785,11 @@ async function launchIt(id){
   if(!confirm("Launch this wave? This spends real money from the Terac balance and begins recruiting.")) return;
   const[ok,j]=await post("/api/ops/launch",{opportunityId:id});
   out("draftout",j); if(ok)setTimeout(()=>location.reload(),900);
+}
+async function resizeIt(id){
+  out("draftout","repricing…");
+  const[ok,j]=await post("/api/ops/resize",{opportunityId:id,participants:+resize.value});
+  out("draftout",j); if(ok)setTimeout(()=>location.reload(),700);
 }
 async function stopIt(id){
   if(!confirm("Stop recruiting on this wave?")) return;

@@ -105,6 +105,7 @@ export const listProjects = () => call("/projects", { method: "GET" });
 export const createProject = (name) => call("/projects", { body: { name } });
 export const createOpportunity = (body) => call("/opportunities", { body });
 export const getOpportunity = (id) => call(`/opportunities/${id}`, { method: "GET" });
+export const updateOpportunity = (id, body) => call(`/opportunities/${id}`, { method: "PATCH", body });
 export const launchOpportunity = (id) => call(`/opportunities/${id}/launch`, { body: {} });
 export const stopOpportunity = (id) => call(`/opportunities/${id}/stop`, { body: {} });
 export const getSubmissions = (id, params = "") =>
